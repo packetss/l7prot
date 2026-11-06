@@ -20,10 +20,12 @@ local UA_BLOCKLIST_ENABLED = true
 local BLOCKLIST_ENABLED    = true
 local SUSPICION_THRESHOLD  = 3
 
--- V2: Auto-ban configuration
+-- V2: Auto-ban configuration with escalating penalties
 local AUTO_BAN_ENABLED        = true
 local RATE_LIMIT_STRIKES      = 5      -- ban after this many 429s
-local AUTO_BAN_DURATION_MS    = 300000 -- 5 minutes
+local BAN_TIER1_DURATION_MS   = 5000   -- 5 seconds (first offense)
+local BAN_TIER2_DURATION_MS   = 30000  -- 30 seconds (second offense)
+local BAN_TIER3_DURATION_MS   = 300000 -- 5 minutes (third+ offense)
 local MAX_AUTO_BANS           = 10000  -- prevent memory exhaustion
 
 -- Per-worker state. Envoy runs one Lua VM per worker thread.
@@ -31,8 +33,9 @@ local MAX_AUTO_BANS           = 10000  -- prevent memory exhaustion
 local buckets     = {}
 local stats       = {}
 local blocked_ips = {}
-local auto_banned = {}      -- V2: temporary bans
+local auto_banned = {}      -- V2: temporary bans { ip = ban_until_ms }
 local rate_strikes = {}     -- V2: track violations per IP
+local ban_history = {}      -- V2: track how many times IP was banned
 local auto_ban_count = 0    -- V2: track table size
 
 local COUNTER_CEILING  = 1000000
@@ -135,6 +138,7 @@ local function is_auto_banned(ip, now_ms)
 end
 
 -- V2: Record a rate limit violation, auto-ban if threshold reached
+-- Uses escalating ban durations based on offense history
 local function record_rate_violation(ip, now_ms)
   if not AUTO_BAN_ENABLED then return end
 
@@ -143,10 +147,23 @@ local function record_rate_violation(ip, now_ms)
 
   if strikes >= RATE_LIMIT_STRIKES then
     if auto_ban_count < MAX_AUTO_BANS then
-      auto_banned[ip] = now_ms + AUTO_BAN_DURATION_MS
+      -- Determine ban duration based on history
+      local ban_count = (ban_history[ip] or 0) + 1
+      ban_history[ip] = ban_count
+
+      local ban_duration
+      if ban_count == 1 then
+        ban_duration = BAN_TIER1_DURATION_MS
+      elseif ban_count == 2 then
+        ban_duration = BAN_TIER2_DURATION_MS
+      else
+        ban_duration = BAN_TIER3_DURATION_MS
+      end
+
+      auto_banned[ip] = now_ms + ban_duration
       auto_ban_count = auto_ban_count + 1
       inc("auto_banned")
-      handle:logWarn("Auto-banned IP " .. ip .. " for " .. (AUTO_BAN_DURATION_MS/1000) .. "s after " .. strikes .. " violations")
+      inc("auto_ban_tier" .. math.min(ban_count, 3))
     end
   end
 end
