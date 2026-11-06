@@ -96,6 +96,13 @@ static_resources:
                   - name: backend
                     domains: ["*"]
                     routes:
+                      # Dashboard route - proxied to localhost:8888
+                      - match: { prefix: "/dashboard" }
+                        route:
+                          cluster: dashboard
+                          prefix_rewrite: "/"
+                          timeout: 30s
+                      # Default route - origin
                       - match: { prefix: "/" }
                         route:
                           cluster: origin
@@ -201,6 +208,7 @@ static_resources:
   # clusters
   # --------------------------------------------------------------------------
   clusters:
+    # Origin - the backend application
     - name: origin
       type: STATIC
       connect_timeout: 2s
@@ -224,6 +232,19 @@ static_resources:
           unhealthy_threshold: 3
           healthy_threshold: 1
           http_health_check: { path: /healthz }
+
+    # Dashboard - real-time attack monitoring UI
+    - name: dashboard
+      type: STATIC
+      connect_timeout: 2s
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: dashboard
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: 127.0.0.1, port_value: 8888 }
 
 layered_runtime:
   layers:

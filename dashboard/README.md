@@ -10,6 +10,7 @@ Real-time attack monitoring dashboard with live stats, event feeds, and attacker
 - 🌍 **Top attacker IPs**: see who's hitting you the most
 - 🔒 **JA4 fingerprint tracking**: identify bot patterns
 - 📈 **Auto-updating**: polls every 1-2 seconds
+- 🛡️ **Protected by Envoy**: routes through your L7 protection edge
 
 ## Installation
 
@@ -35,34 +36,21 @@ sudo systemctl start l7dashboard
 sudo systemctl enable l7dashboard
 ```
 
+**Restart Envoy** to enable the `/dashboard` route:
+
+```bash
+sudo systemctl restart l7ddos-envoy
+```
+
 ## Access
 
-**Local only** (secure):
-```bash
-# Access at http://127.0.0.1:8888
-# Login with credentials from /etc/l7dashboard.env
-```
+The dashboard is exposed at `https://your-domain-or-ip/dashboard` and protected by:
+- Your L7 edge filters (rate limiting, auto-bans)
+- Dashboard login (username/password)
 
-**Remote access** via SSH tunnel (recommended):
-```bash
-# On your local machine:
-ssh -L 8888:127.0.0.1:8888 root@your-vps-ip
+Just visit: **https://your-server/dashboard**
 
-# Then visit http://localhost:8888 in your browser
-```
-
-**Remote access** via Nginx reverse proxy (alternative):
-```nginx
-location /dashboard {
-    proxy_pass http://127.0.0.1:8888;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    
-    # Optional: Add IP whitelist
-    allow YOUR_IP;
-    deny all;
-}
-```
+Login with credentials from `/etc/l7dashboard.env`
 
 ## Environment Variables
 
