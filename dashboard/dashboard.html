@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L7 Protection Dashboard</title>
+<style>
+:root { color-scheme: dark; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 1rem;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #21262d;
+}
+
+h1 { font-size: 1.5rem; }
+.logout {
+  color: #8b949e;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+.logout:hover { color: #e6edf3; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.5rem 0;
+}
+
+.stat-label {
+  color: #8b949e;
+  font-size: 0.875rem;
+}
+
+.success { color: #3fb950; }
+.warning { color: #d29922; }
+.danger { color: #f85149; }
+.info { color: #58a6ff; }
+
+.section {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulse {
+  width: 8px;
+  height: 8px;
+  background: #3fb950;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.events-feed {
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 0.875rem;
+  font-family: ui-monospace, monospace;
+}
+
+.event {
+  padding: 0.5rem;
+  border-bottom: 1px solid #21262d;
+  display: grid;
+  grid-template-columns: 80px 120px 50px 1fr;
+  gap: 1rem;
+}
+
+.event:hover { background: #0d1117; }
+
+.event-ts { color: #6e7681; font-size: 0.8rem; }
+.event-ip { color: #58a6ff; }
+.event-status { font-weight: 600; }
+.status-200 { color: #3fb950; }
+.status-403, .status-429 { color: #f85149; }
+.status-404 { color: #d29922; }
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.875rem;
+}
+
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background: #0d1117;
+  border-radius: 4px;
+}
+
+.list-count {
+  color: #8b949e;
+  font-weight: 600;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .columns { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛡️ L7 Protection Dashboard</h1>
+  <a href="/logout" class="logout">Logout</a>
+</header>
+
+<div class="grid" id="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Requests</div>
+    <div class="stat-value" id="stat-total">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Success (200)</div>
+    <div class="stat-value success" id="stat-success">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Blocked (403)</div>
+    <div class="stat-value danger" id="stat-blocked">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Rate Limited (429)</div>
+    <div class="stat-value warning" id="stat-ratelimit">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Auto-Banned</div>
+    <div class="stat-value danger" id="stat-banned">0</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">
+    <span class="pulse"></span>
+    Live Events
+  </div>
+  <div class="events-feed" id="events-feed"></div>
+</div>
+
+<div class="columns">
+  <div class="section">
+    <div class="section-title">Top Attacker IPs</div>
+    <div class="list" id="top-ips"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Top JA4 Fingerprints</div>
+    <div class="list" id="top-ja4"></div>
+  </div>
+</div>
+
+<script>
+const $$ = (sel) => document.querySelector(sel);
+
+async function updateStats() {
+  try {
+    const resp = await fetch('/api/stats');
+    const data = await resp.json();
+
+    $$('#stat-total').textContent = data.stats.requests_total || 0;
+    $$('#stat-success').textContent = data.stats.success_2xx || 0;
+    $$('#stat-blocked').textContent = (data.stats.ip_blocked || 0) + (data.stats.ua_blocked || 0) + (data.stats.suspicious_blocked || 0);
+    $$('#stat-ratelimit').textContent = data.stats.rate_limited || 0;
+    $$('#stat-banned').textContent = data.stats.auto_banned || 0;
+
+    // Top IPs
+    const topIpsHTML = data.top_ips.map(item =>
+      `<div class="list-item"><span>${item.ip}</span><span class="list-count">${item.count}</span></div>`
+    ).join('');
+    $$('#top-ips').innerHTML = topIpsHTML || '<div class="list-item">No data yet</div>';
+
+    // Top JA4
+    const topJA4HTML = data.top_ja4.map(item =>
+      `<div class="list-item"><span>${item.ja4}</span><span class="list-count">${item.count}</span></div>`
+    ).join('');
+    $$('#top-ja4').innerHTML = topJA4HTML || '<div class="list-item">No data yet</div>';
+
+  } catch (err) {
+    console.error('Failed to fetch stats:', err);
+  }
+}
+
+async function updateEvents() {
+  try {
+    const resp = await fetch('/api/events');
+    const events = await resp.json();
+
+    const eventsHTML = events.reverse().slice(0, 50).map(e => {
+      const statusClass = `status-${e.status}`;
+      const time = new Date(e.ts).toLocaleTimeString();
+      return `
+        <div class="event">
+          <span class="event-ts">${time}</span>
+          <span class="event-ip">${e.ip}</span>
+          <span class="event-status ${statusClass}">${e.status}</span>
+          <span>${e.method} ${e.uri}</span>
+        </div>
+      `;
+    }).join('');
+
+    $$('#events-feed').innerHTML = eventsHTML || '<div class="event">Waiting for events...</div>';
+
+  } catch (err) {
+    console.error('Failed to fetch events:', err);
+  }
+}
+
+// Poll every 2 seconds
+setInterval(updateStats, 2000);
+setInterval(updateEvents, 1000);
+
+// Initial load
+updateStats();
+updateEvents();
+</script>
+
+</body>
+</html>
