@@ -1,4 +1,4 @@
--- edge_guard.lua — L7 filtering for Envoy (real Lua filter API)
+-- edge_guard.lua — L7 filtering for Envoy (real Lua filter API) — V2
 --
 -- API surface used (verified against Envoy 1.35):
 --   handle:headers():get(name)
@@ -10,6 +10,8 @@
 -- JA4 fingerprinting is done by tls_inspector at the listener level
 -- and logged via access log formatter. It is NOT accessible from Lua
 -- dynamicMetadata — JA4 analysis is offline/log-based only.
+--
+-- V2 CHANGES: Auto-ban IPs after repeated rate limit violations
 
 local RATE_LIMIT_ENABLED   = true
 local IP_RATE_LIMIT        = 20
@@ -18,11 +20,20 @@ local UA_BLOCKLIST_ENABLED = true
 local BLOCKLIST_ENABLED    = true
 local SUSPICION_THRESHOLD  = 3
 
+-- V2: Auto-ban configuration
+local AUTO_BAN_ENABLED        = true
+local RATE_LIMIT_STRIKES      = 5      -- ban after this many 429s
+local AUTO_BAN_DURATION_MS    = 300000 -- 5 minutes
+local MAX_AUTO_BANS           = 10000  -- prevent memory exhaustion
+
 -- Per-worker state. Envoy runs one Lua VM per worker thread.
 -- Not shared across workers — effective limits scale with worker count.
 local buckets     = {}
 local stats       = {}
 local blocked_ips = {}
+local auto_banned = {}      -- V2: temporary bans
+local rate_strikes = {}     -- V2: track violations per IP
+local auto_ban_count = 0    -- V2: track table size
 
 local COUNTER_CEILING  = 1000000
 local MAX_BUCKET_KEYS  = 50000
@@ -96,6 +107,50 @@ local function gc_buckets(now_ms)
   end
 end
 
+-- V2: Evict expired auto-bans
+local function gc_auto_bans(now_ms)
+  local to_delete = {}
+  for ip, ban_until in pairs(auto_banned) do
+    if now_ms >= ban_until then
+      to_delete[#to_delete + 1] = ip
+    end
+  end
+  for _, ip in ipairs(to_delete) do
+    auto_banned[ip] = nil
+    rate_strikes[ip] = nil
+    auto_ban_count = auto_ban_count - 1
+    inc("auto_ban_expired")
+  end
+end
+
+-- V2: Check if IP is auto-banned
+local function is_auto_banned(ip, now_ms)
+  if not AUTO_BAN_ENABLED then return false end
+  local ban_until = auto_banned[ip]
+  if ban_until and now_ms < ban_until then
+    inc("auto_ban_hit")
+    return true
+  end
+  return false
+end
+
+-- V2: Record a rate limit violation, auto-ban if threshold reached
+local function record_rate_violation(ip, now_ms)
+  if not AUTO_BAN_ENABLED then return end
+
+  local strikes = (rate_strikes[ip] or 0) + 1
+  rate_strikes[ip] = strikes
+
+  if strikes >= RATE_LIMIT_STRIKES then
+    if auto_ban_count < MAX_AUTO_BANS then
+      auto_banned[ip] = now_ms + AUTO_BAN_DURATION_MS
+      auto_ban_count = auto_ban_count + 1
+      inc("auto_banned")
+      handle:logWarn("Auto-banned IP " .. ip .. " for " .. (AUTO_BAN_DURATION_MS/1000) .. "s after " .. strikes .. " violations")
+    end
+  end
+end
+
 -- Token bucket. Returns true if ALLOWED.
 -- handle:timestamp() returns milliseconds since epoch.
 local function allow_rate(ip, now_ms)
@@ -165,6 +220,7 @@ function envoy_on_request(handle)
   end
 
   gc_buckets(now_ms)
+  gc_auto_bans(now_ms)
 
   inc("requests_total")
   if path:match("^[%w%-%_/%.]+$") and #path <= 64 then
@@ -186,6 +242,13 @@ function envoy_on_request(handle)
     inc("healthz_probe")
   end
 
+  -- V2: Check auto-ban first (cheapest check)
+  if is_auto_banned(ip, now_ms) then
+    handle:respond({[":status"] = "403", ["content-type"] = "text/plain"},
+                   "banned\n")
+    return
+  end
+
   if ip_blocked(ip) then
     handle:respond({[":status"] = "403", ["content-type"] = "text/plain"},
                    "blocked\n")
@@ -200,6 +263,7 @@ function envoy_on_request(handle)
 
   if RATE_LIMIT_ENABLED then
     if not allow_rate(ip, now_ms) then
+      record_rate_violation(ip, now_ms)
       handle:respond({[":status"] = "429", ["content-type"] = "text/plain",
                        ["retry-after"] = "1"},
                      "rate limited\n")
