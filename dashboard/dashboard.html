@@ -199,6 +199,13 @@ h1 { font-size: 1.5rem; }
 <script>
 const $$ = (sel) => document.querySelector(sel);
 
+// HTML escape to prevent XSS
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 async function updateStats() {
   try {
     const resp = await fetch('/api/stats');
@@ -212,13 +219,13 @@ async function updateStats() {
 
     // Top IPs
     const topIpsHTML = data.top_ips.map(item =>
-      `<div class="list-item"><span>${item.ip}</span><span class="list-count">${item.count}</span></div>`
+      `<div class="list-item"><span>${esc(item.ip)}</span><span class="list-count">${item.count}</span></div>`
     ).join('');
     $$('#top-ips').innerHTML = topIpsHTML || '<div class="list-item">No data yet</div>';
 
     // Top JA4
     const topJA4HTML = data.top_ja4.map(item =>
-      `<div class="list-item"><span>${item.ja4}</span><span class="list-count">${item.count}</span></div>`
+      `<div class="list-item"><span>${esc(item.ja4)}</span><span class="list-count">${item.count}</span></div>`
     ).join('');
     $$('#top-ja4').innerHTML = topJA4HTML || '<div class="list-item">No data yet</div>';
 
@@ -237,10 +244,10 @@ async function updateEvents() {
       const time = new Date(e.ts).toLocaleTimeString();
       return `
         <div class="event">
-          <span class="event-ts">${time}</span>
-          <span class="event-ip">${e.ip}</span>
+          <span class="event-ts">${esc(time)}</span>
+          <span class="event-ip">${esc(e.ip)}</span>
           <span class="event-status ${statusClass}">${e.status}</span>
-          <span>${e.method} ${e.uri}</span>
+          <span>${esc(e.method)} ${esc(e.uri)}</span>
         </div>
       `;
     }).join('');
