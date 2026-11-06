@@ -69,10 +69,11 @@ through a live Envoy, and it's where you'll spend most of your time.
 
 ## Install
 
-On your ServerVerse VPS (Debian/Ubuntu), as root:
+On your VPS (Debian/Ubuntu), as root:
 
 ```bash
-git clone <your-repo> l7ddos && cd l7ddos
+git clone https://github.com/packetss/l7prot.git
+cd l7prot
 DOMAIN=your.domain.com ./scripts/install.sh
 ```
 
