@@ -67,26 +67,35 @@ through a live Envoy, and it's where you'll spend most of your time.
 
 ---
 
-## Install
+## Quick Deploy
 
-On your VPS (Debian/Ubuntu), as root:
+One-command deployment on your VPS (Debian/Ubuntu), as root:
+
+```bash
+git clone https://github.com/packetss/l7prot.git
+cd l7prot
+sudo ./deploy.sh your.domain.com [email@optional.com]
+```
+
+That's it. The script handles everything:
+- Installs Envoy (contrib), Coraza WAF, and all dependencies
+- Sets up the origin app and systemd services
+- Gets a Let's Encrypt certificate (DNS must point to your VPS first)
+- Configures the firewall (only 22/80/443 open)
+- Runs verification tests
+- Sets up auto-renewal for the cert
+
+Your site will be live at `https://your.domain.com` when done.
+
+## Manual Install (step-by-step)
+
+If you prefer to install piece by piece:
 
 ```bash
 git clone https://github.com/packetss/l7prot.git
 cd l7prot
 DOMAIN=your.domain.com ./scripts/install.sh
-```
-
-Then get a TLS cert:
-
-```bash
 DOMAIN=your.domain.com ./scripts/get-cert.sh
-```
-
-Add the cert to `envoy.yaml` under the listener's `transport_socket`, then:
-
-```bash
-systemctl restart l7ddos-envoy
 DOMAIN=your.domain.com ./scripts/test.sh
 ```
 
