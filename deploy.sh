@@ -67,7 +67,7 @@ fi
 # ===========================================================================
 log "Step 3/5: Installing configs and origin app"
 
-mkdir -p /etc/envoy/lua /var/log/envoy /var/lib/l7ddos
+mkdir -p /etc/envoy/lua /etc/envoy/coraza /var/log/envoy /var/lib/l7ddos
 cp "$SRC_DIR/envoy/envoy.yaml"          /etc/envoy/envoy.yaml
 cp "$SRC_DIR/envoy/lua/edge_guard.lua"  /etc/envoy/lua/edge_guard.lua
 cp "$SRC_DIR/envoy/coraza/rules.conf"   /etc/envoy/coraza/rules.conf
