@@ -245,6 +245,21 @@ async def api_events(request):
     return web.json_response(list(recent_events)[-100:])
 
 
+async def api_public_stats(request):
+    """Public stats endpoint - no auth required"""
+    return web.json_response({
+        "stats": {
+            "requests_total": stats_cache.get("requests_total", 0),
+            "success_2xx": stats_cache.get("success_2xx", 0),
+            "ip_blocked": stats_cache.get("ip_blocked", 0),
+            "ua_blocked": stats_cache.get("ua_blocked", 0),
+            "suspicious_blocked": stats_cache.get("suspicious_blocked", 0),
+            "rate_limited": stats_cache.get("rate_limited", 0),
+            "auto_banned": stats_cache.get("auto_banned", 0),
+        }
+    })
+
+
 async def logout(request):
     session = await aiohttp_session.get_session(request)
     session.clear()
@@ -270,6 +285,8 @@ def create_app():
     # Also expose API routes without /dashboard prefix (for Envoy routing)
     app.router.add_get("/api/stats", api_stats)
     app.router.add_get("/api/events", api_events)
+    # Public stats endpoint (no auth)
+    app.router.add_get("/api/public-stats", api_public_stats)
 
     # Start log tailer in background thread (non-blocking)
     async def start_background_tasks(app):
