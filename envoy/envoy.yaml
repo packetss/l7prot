@@ -71,7 +71,18 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
           enable_ja4_fingerprinting: true
     filter_chains:
-      - filters:
+      - transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+            common_tls_context:
+              tls_params:
+                tls_minimum_protocol_version: TLSv1_2
+              tls_certificates:
+                - certificate_chain: { filename: /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem }
+                  private_key: { filename: /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem }
+              alpn_protocols: ["h2", "http/1.1"]
+        filters:
           - name: envoy.filters.network.http_connection_manager
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
