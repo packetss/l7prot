@@ -84,66 +84,69 @@ async def get_envoy_stats():
 
 async def tail_envoy_logs():
     """Tail Envoy logs and parse JSON events"""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL
-        )
+    while True:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
 
-        while True:
-            line = await proc.stdout.readline()
-            if not line:
-                await asyncio.sleep(1)
-                continue
+            while True:
+                try:
+                    line = await asyncio.wait_for(proc.stdout.readline(), timeout=5.0)
+                    if not line:
+                        break
 
-            try:
-                data = json.loads(line.decode().strip())
-                if "status" in data and "ip" in data:
-                    status = data.get("status")
-                    ip = data["ip"].split(":")[0]
+                    data = json.loads(line.decode().strip())
+                    if "status" in data and "ip" in data:
+                        status = data.get("status")
+                        ip = data["ip"].split(":")[0]
 
-                    event = {
-                        "ts": data.get("ts", ""),
-                        "ip": ip,
-                        "status": status,
-                        "method": data.get("method", ""),
-                        "uri": data.get("uri", ""),
-                        "ua": data.get("ua", "")[:50] if data.get("ua") else None,
-                        "ja4": data.get("ja4", "")[:20],
-                    }
-                    recent_events.append(event)
+                        event = {
+                            "ts": data.get("ts", ""),
+                            "ip": ip,
+                            "status": status,
+                            "method": data.get("method", ""),
+                            "uri": data.get("uri", ""),
+                            "ua": data.get("ua", "")[:50] if data.get("ua") else None,
+                            "ja4": data.get("ja4", "")[:20],
+                        }
+                        recent_events.append(event)
 
-                    # Update counters
-                    ip_counters[ip] += 1
-                    if event["ja4"]:
-                        ja4_counters[event["ja4"]] += 1
+                        # Update counters
+                        ip_counters[ip] += 1
+                        if event["ja4"]:
+                            ja4_counters[event["ja4"]] += 1
 
-                    # Track stats by status code
-                    stats_cache.setdefault("requests_total", 0)
-                    stats_cache["requests_total"] += 1
+                        # Track stats by status code
+                        stats_cache.setdefault("requests_total", 0)
+                        stats_cache["requests_total"] += 1
 
-                    if status == 200:
-                        stats_cache.setdefault("success_2xx", 0)
-                        stats_cache["success_2xx"] += 1
-                    elif status == 403:
-                        stats_cache.setdefault("ip_blocked", 0)
-                        stats_cache["ip_blocked"] += 1
-                    elif status == 429:
-                        stats_cache.setdefault("rate_limited", 0)
-                        stats_cache["rate_limited"] += 1
+                        if status == 200:
+                            stats_cache.setdefault("success_2xx", 0)
+                            stats_cache["success_2xx"] += 1
+                        elif status == 403:
+                            stats_cache.setdefault("ip_blocked", 0)
+                            stats_cache["ip_blocked"] += 1
+                        elif status == 429:
+                            stats_cache.setdefault("rate_limited", 0)
+                            stats_cache["rate_limited"] += 1
 
-                    # Check for auto-ban in flags
-                    flags = data.get("flags", "")
-                    if "banned" in flags.lower():
-                        stats_cache.setdefault("auto_banned", 0)
-                        stats_cache["auto_banned"] += 1
+                        # Check for auto-ban in flags
+                        flags = data.get("flags", "")
+                        if "banned" in flags.lower():
+                            stats_cache.setdefault("auto_banned", 0)
+                            stats_cache["auto_banned"] += 1
 
-            except (json.JSONDecodeError, KeyError):
-                pass
-    except Exception as e:
-        print(f"Log tailer error: {e}")
-        await asyncio.sleep(5)
+                except asyncio.TimeoutError:
+                    continue
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    continue
+
+        except Exception as e:
+            print(f"Log tailer error: {e}, restarting in 5s...")
+            await asyncio.sleep(5)
 
 
 # Web handlers
