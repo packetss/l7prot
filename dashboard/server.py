@@ -98,6 +98,10 @@ def tail_envoy_logs():
             for line in proc.stdout:
                 try:
                     data = json.loads(line.strip())
+                    # Skip dashboard API calls from event feed
+                    uri = data.get("uri", "")
+                    if uri.startswith("/dashboard/api/") or uri.startswith("/api/"):
+                        continue
                     if "status" in data and "ip" in data:
                         status = data.get("status")
                         ip = data["ip"].split(":")[0]
