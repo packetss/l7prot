@@ -69,7 +69,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/stats":
             try:
-                req = urllib.request.Request("http://127.0.0.1:9901/stats?format=json")
+                req = urllib.request.Request("http://127.0.0.1:8888/dashboard/api/stats")
+                req.add_header('Cookie', 'AIOHTTP_SESSION=dummy')
                 with urllib.request.urlopen(req, timeout=2) as resp:
                     stats_data = json.loads(resp.read().decode())
                 self._send(200, json.dumps(stats_data), "application/json")

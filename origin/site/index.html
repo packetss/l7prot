@@ -301,7 +301,6 @@ h1 {
 </div>
 
 <script>
-// Generate random stars
 function generateStars() {
   const starsContainer = document.getElementById('stars');
   for (let i = 0; i < 50; i++) {
@@ -324,32 +323,20 @@ async function updateStats() {
     if (!resp.ok) throw new Error('Stats API error');
 
     const data = await resp.json();
-    const stats = data.stats || [];
+    const stats = data.stats || {};
 
-    let total = 0, blocked = 0, ratelimited = 0, success = 0;
-
-    for (const stat of stats) {
-      const name = stat.name || '';
-      const val = stat.value || 0;
-
-      if (name.includes('edge_guard.requests_total')) total = val;
-      if (name.includes('edge_guard.ip_blocked')) blocked += val;
-      if (name.includes('edge_guard.ua_blocked')) blocked += val;
-      if (name.includes('edge_guard.suspicious_blocked')) blocked += val;
-      if (name.includes('edge_guard.rate_limited')) ratelimited = val;
-      if (name.includes('https_edge.downstream_rq_2xx')) success = val;
-    }
+    const total = stats.requests_total || 0;
+    const blocked = (stats.ip_blocked || 0) + (stats.ua_blocked || 0) + (stats.suspicious_blocked || 0);
+    const ratelimited = stats.rate_limited || 0;
+    const success = stats.success_2xx || 0;
 
     const threats = blocked + ratelimited;
     const health = total > 0 ? Math.round(((total - blocked - ratelimited) / total) * 100) : 0;
-
-    // Update main stats (approximate live RPS as threats/10 for demo, or total/3600 for hourly)
-    const liveRPS = Math.floor(threats / 10) || Math.floor(Math.random() * 50);
+    const liveRPS = Math.max(1, Math.floor(threats / 20));
 
     document.getElementById('stat-live').textContent = liveRPS.toLocaleString();
     document.getElementById('stat-threats').textContent = threats.toLocaleString();
 
-    // Update narrative
     document.getElementById('narrative-threats').textContent = threats.toLocaleString();
     document.getElementById('narrative-blocked').textContent = blocked.toLocaleString();
     document.getElementById('narrative-ratelimited').textContent = ratelimited.toLocaleString();
