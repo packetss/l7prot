@@ -256,6 +256,9 @@ def create_app():
     app.router.add_get("/dashboard/", dashboard)
     app.router.add_get("/dashboard/api/stats", api_stats)
     app.router.add_get("/dashboard/api/events", api_events)
+    # Also expose API routes without /dashboard prefix (for Envoy routing)
+    app.router.add_get("/api/stats", api_stats)
+    app.router.add_get("/api/events", api_events)
 
     # Start log tailer in background thread (non-blocking)
     async def start_background_tasks(app):
