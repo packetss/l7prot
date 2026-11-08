@@ -120,6 +120,10 @@ static_resources:
                         route:
                           cluster: dashboard
                           timeout: 30s
+                      - match: { prefix: "/api/public-stats" }
+                        route:
+                          cluster: dashboard
+                          timeout: 30s
                       - match: { prefix: "/api/logout" }
                         route:
                           cluster: dashboard
