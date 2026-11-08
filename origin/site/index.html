@@ -338,10 +338,15 @@ async function updateStats() {
     const delta = Math.max(0, total - window.prevTotal);
     window.prevTotal = total;
 
-    document.getElementById('stat-live').textContent = delta.toLocaleString();
-    document.getElementById('stat-threats').textContent = threats.toLocaleString();
+    // Track threat delta for active threats
+    if (!window.prevThreats) window.prevThreats = threats;
+    const activeThreatsDelta = Math.max(0, threats - window.prevThreats);
+    window.prevThreats = threats;
 
-    document.getElementById('narrative-threats').textContent = threats.toLocaleString();
+    document.getElementById('stat-live').textContent = delta.toLocaleString();
+    document.getElementById('stat-threats').textContent = activeThreatsDelta.toLocaleString();
+
+    document.getElementById('narrative-threats').textContent = activeThreatsDelta.toLocaleString();
     document.getElementById('narrative-blocked').textContent = blocked.toLocaleString();
     document.getElementById('narrative-ratelimited').textContent = ratelimited.toLocaleString();
     document.getElementById('narrative-health').textContent = health + '%';
