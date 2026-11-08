@@ -79,8 +79,8 @@ static_resources:
               tls_params:
                 tls_minimum_protocol_version: TLSv1_2
               tls_certificates:
-                - certificate_chain: { filename: /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem }
-                  private_key: { filename: /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem }
+                - certificate_chain: { filename: /etc/letsencrypt/live/filterz.xyz/fullchain.pem }
+                  private_key: { filename: /etc/letsencrypt/live/filterz.xyz/privkey.pem }
               alpn_protocols: ["h2", "http/1.1"]
         filters:
           - name: envoy.filters.network.http_connection_manager
@@ -111,7 +111,6 @@ static_resources:
                       - match: { prefix: "/dashboard" }
                         route:
                           cluster: dashboard
-                          prefix_rewrite: "/"
                           timeout: 30s
                       # Default route - origin
                       - match: { prefix: "/" }
