@@ -36,7 +36,8 @@ STATS_CACHE_SECONDS = 2
 # In-memory event storage
 recent_events = deque(maxlen=1000)
 stats_cache = {"data": {}, "timestamp": 0}
-ip_counters = defaultdict(int)
+ip_counters = defaultdict(int)  # all requests
+attacker_ip_counters = defaultdict(int)  # only 403/429
 ja4_counters = defaultdict(int)
 
 
@@ -116,6 +117,10 @@ def tail_envoy_logs():
                         ip_counters[ip] += 1
                         if event["ja4"]:
                             ja4_counters[event["ja4"]] += 1
+
+                        # Only count as attacker if blocked or rate limited
+                        if status in (403, 429):
+                            attacker_ip_counters[ip] += 1
 
                         # Track stats by status code
                         stats_cache.setdefault("requests_total", 0)
@@ -217,8 +222,8 @@ async def api_stats(request):
         "auto_banned": stats_cache.get("auto_banned", 0),
     }
 
-    # Top IPs
-    top_ips = sorted(ip_counters.items(), key=lambda x: x[1], reverse=True)[:10]
+    # Top attacker IPs (only 403/429)
+    top_ips = sorted(attacker_ip_counters.items(), key=lambda x: x[1], reverse=True)[:10]
 
     # Top JA4s
     top_ja4 = sorted(ja4_counters.items(), key=lambda x: x[1], reverse=True)[:10]
