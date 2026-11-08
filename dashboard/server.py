@@ -84,37 +84,66 @@ async def get_envoy_stats():
 
 async def tail_envoy_logs():
     """Tail Envoy logs and parse JSON events"""
-    proc = await asyncio.create_subprocess_exec(
-        "journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL
+        )
 
-    while True:
-        line = await proc.stdout.readline()
-        if not line:
-            break
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                await asyncio.sleep(1)
+                continue
 
-        try:
-            data = json.loads(line.decode().strip())
-            if "status" in data and "ip" in data:
-                event = {
-                    "ts": data.get("ts", ""),
-                    "ip": data["ip"].split(":")[0],
-                    "status": data.get("status"),
-                    "method": data.get("method", ""),
-                    "uri": data.get("uri", ""),
-                    "ua": data.get("ua", "")[:50] if data.get("ua") else None,
-                    "ja4": data.get("ja4", "")[:20],
-                }
-                recent_events.append(event)
+            try:
+                data = json.loads(line.decode().strip())
+                if "status" in data and "ip" in data:
+                    status = data.get("status")
+                    ip = data["ip"].split(":")[0]
 
-                # Update counters
-                ip_counters[event["ip"]] += 1
-                if event["ja4"]:
-                    ja4_counters[event["ja4"]] += 1
-        except (json.JSONDecodeError, KeyError):
-            pass
+                    event = {
+                        "ts": data.get("ts", ""),
+                        "ip": ip,
+                        "status": status,
+                        "method": data.get("method", ""),
+                        "uri": data.get("uri", ""),
+                        "ua": data.get("ua", "")[:50] if data.get("ua") else None,
+                        "ja4": data.get("ja4", "")[:20],
+                    }
+                    recent_events.append(event)
+
+                    # Update counters
+                    ip_counters[ip] += 1
+                    if event["ja4"]:
+                        ja4_counters[event["ja4"]] += 1
+
+                    # Track stats by status code
+                    stats_cache.setdefault("requests_total", 0)
+                    stats_cache["requests_total"] += 1
+
+                    if status == 200:
+                        stats_cache.setdefault("success_2xx", 0)
+                        stats_cache["success_2xx"] += 1
+                    elif status == 403:
+                        stats_cache.setdefault("ip_blocked", 0)
+                        stats_cache["ip_blocked"] += 1
+                    elif status == 429:
+                        stats_cache.setdefault("rate_limited", 0)
+                        stats_cache["rate_limited"] += 1
+
+                    # Check for auto-ban in flags
+                    flags = data.get("flags", "")
+                    if "banned" in flags.lower():
+                        stats_cache.setdefault("auto_banned", 0)
+                        stats_cache["auto_banned"] += 1
+
+            except (json.JSONDecodeError, KeyError):
+                pass
+    except Exception as e:
+        print(f"Log tailer error: {e}")
+        await asyncio.sleep(5)
 
 
 # Web handlers
@@ -201,7 +230,7 @@ async def api_events(request):
 async def logout(request):
     session = await aiohttp_session.get_session(request)
     session.clear()
-    return web.HTTPFound("/login")
+    return web.HTTPFound("/dashboard/login")
 
 
 def create_app():
@@ -219,8 +248,19 @@ def create_app():
     app.router.add_get("/dashboard/api/stats", api_stats)
     app.router.add_get("/dashboard/api/events", api_events)
 
-    # Start log tailer
-    app.on_startup.append(lambda _: asyncio.create_task(tail_envoy_logs()))
+    # Start log tailer in background (non-blocking)
+    async def start_background_tasks(app):
+        app['log_tailer'] = asyncio.create_task(tail_envoy_logs())
+
+    async def cleanup_background_tasks(app):
+        app['log_tailer'].cancel()
+        try:
+            await app['log_tailer']
+        except asyncio.CancelledError:
+            pass
+
+    app.on_startup.append(start_background_tasks)
+    app.on_cleanup.append(cleanup_background_tasks)
 
     return app
 
