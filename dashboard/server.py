@@ -9,6 +9,7 @@ import json
 import time
 import asyncio
 import subprocess
+import threading
 from datetime import datetime
 from collections import defaultdict, deque
 from pathlib import Path
@@ -82,23 +83,20 @@ async def get_envoy_stats():
         return stats_cache.get("data", {})
 
 
-async def tail_envoy_logs():
-    """Tail Envoy logs and parse JSON events"""
+def tail_envoy_logs():
+    """Tail Envoy logs and parse JSON events (threaded)"""
     while True:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            proc = subprocess.Popen(
+                ["journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True
             )
 
-            while True:
+            for line in proc.stdout:
                 try:
-                    line = await asyncio.wait_for(proc.stdout.readline(), timeout=5.0)
-                    if not line:
-                        break
-
-                    data = json.loads(line.decode().strip())
+                    data = json.loads(line.strip())
                     if "status" in data and "ip" in data:
                         status = data.get("status")
                         ip = data["ip"].split(":")[0]
@@ -139,14 +137,12 @@ async def tail_envoy_logs():
                             stats_cache.setdefault("auto_banned", 0)
                             stats_cache["auto_banned"] += 1
 
-                except asyncio.TimeoutError:
-                    continue
                 except (json.JSONDecodeError, KeyError, ValueError):
-                    continue
+                    pass
 
         except Exception as e:
             print(f"Log tailer error: {e}, restarting in 5s...")
-            await asyncio.sleep(5)
+            time.sleep(5)
 
 
 # Web handlers
@@ -261,9 +257,10 @@ def create_app():
     app.router.add_get("/dashboard/api/stats", api_stats)
     app.router.add_get("/dashboard/api/events", api_events)
 
-    # Start log tailer in background (non-blocking)
+    # Start log tailer in background thread (non-blocking)
     async def start_background_tasks(app):
-        asyncio.create_task(tail_envoy_logs())
+        thread = threading.Thread(target=tail_envoy_logs, daemon=True)
+        thread.start()
 
     app.on_startup.append(start_background_tasks)
 
