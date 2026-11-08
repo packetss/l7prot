@@ -332,9 +332,13 @@ async function updateStats() {
 
     const threats = blocked + ratelimited;
     const health = total > 0 ? Math.round(((total - blocked - ratelimited) / total) * 100) : 0;
-    const liveRPS = Math.max(1, Math.floor(total / 20));
 
-    document.getElementById('stat-live').textContent = liveRPS.toLocaleString();
+    // Track delta since last poll for live request count
+    if (!window.prevTotal) window.prevTotal = total;
+    const delta = Math.max(0, total - window.prevTotal);
+    window.prevTotal = total;
+
+    document.getElementById('stat-live').textContent = delta.toLocaleString();
     document.getElementById('stat-threats').textContent = threats.toLocaleString();
 
     document.getElementById('narrative-threats').textContent = threats.toLocaleString();
