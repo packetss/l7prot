@@ -245,17 +245,74 @@ async def api_events(request):
     return web.json_response(list(recent_events)[-100:])
 
 
+# Cached cumulative stats from journalctl (survives restarts)
+journal_stats_cache = {"data": {}, "timestamp": 0}
+JOURNAL_CACHE_SECONDS = 5
+
+
+def get_journal_stats():
+    """Read cumulative stats directly from journalctl - survives restarts"""
+    now = time.time()
+    if now - journal_stats_cache["timestamp"] < JOURNAL_CACHE_SECONDS:
+        return journal_stats_cache["data"]
+
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", "l7ddos-envoy", "-n", "100000", "--output=cat"],
+            capture_output=True, text=True, timeout=3
+        )
+
+        stats = {
+            "requests_total": 0,
+            "success_2xx": 0,
+            "ip_blocked": 0,
+            "ua_blocked": 0,
+            "suspicious_blocked": 0,
+            "rate_limited": 0,
+            "auto_banned": 0,
+        }
+
+        for line in result.stdout.split('\n'):
+            try:
+                data = json.loads(line)
+                uri = data.get("uri", "")
+                if uri.startswith("/dashboard") or uri.startswith("/api/"):
+                    continue
+                status = data.get("status")
+                if status:
+                    stats["requests_total"] += 1
+                    if status == 200:
+                        stats["success_2xx"] += 1
+                    elif status == 403:
+                        stats["ip_blocked"] += 1
+                    elif status == 429:
+                        stats["rate_limited"] += 1
+                    flags = data.get("flags", "")
+                    if "banned" in flags.lower():
+                        stats["auto_banned"] += 1
+            except:
+                pass
+
+        journal_stats_cache["data"] = stats
+        journal_stats_cache["timestamp"] = now
+        return stats
+    except Exception as e:
+        print(f"Journal stats error: {e}")
+        return journal_stats_cache.get("data", {})
+
+
 async def api_public_stats(request):
-    """Public stats endpoint - no auth required"""
+    """Public stats endpoint - no auth required, reads cumulative from journal"""
+    stats = get_journal_stats()
     return web.json_response({
         "stats": {
-            "requests_total": stats_cache.get("requests_total", 0),
-            "success_2xx": stats_cache.get("success_2xx", 0),
-            "ip_blocked": stats_cache.get("ip_blocked", 0),
-            "ua_blocked": stats_cache.get("ua_blocked", 0),
-            "suspicious_blocked": stats_cache.get("suspicious_blocked", 0),
-            "rate_limited": stats_cache.get("rate_limited", 0),
-            "auto_banned": stats_cache.get("auto_banned", 0),
+            "requests_total": stats.get("requests_total", 0),
+            "success_2xx": stats.get("success_2xx", 0),
+            "ip_blocked": stats.get("ip_blocked", 0),
+            "ua_blocked": stats.get("ua_blocked", 0),
+            "suspicious_blocked": stats.get("suspicious_blocked", 0),
+            "rate_limited": stats.get("rate_limited", 0),
+            "auto_banned": stats.get("auto_banned", 0),
         }
     })
 
