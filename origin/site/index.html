@@ -316,8 +316,13 @@ function generateStars() {
 generateStars();
 
 async function updateStats() {
+  // Don't stack polls: if the last request is still in flight, skip this tick.
+  // Without this, a slow response causes requests to pile up every interval.
+  if (window.statsInFlight) return;
+  window.statsInFlight = true;
+
   try {
-    const resp = await fetch('/api/public-stats');
+    const resp = await fetch('/api/public-stats', { cache: 'no-store' });
     if (!resp.ok) throw new Error('Stats API error');
 
     const data = await resp.json();
@@ -349,6 +354,8 @@ async function updateStats() {
 
   } catch (err) {
     console.error('Failed to fetch stats:', err);
+  } finally {
+    window.statsInFlight = false;
   }
 }
 

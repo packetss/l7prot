@@ -135,6 +135,20 @@ ufw --force enable
 log "ufw configured: only 22/80/443 open"
 
 # ---------------------------------------------------------------------------
+log "Capping journal size"
+# The Envoy access log is extremely chatty under attack. Without a cap the
+# journal grows without bound, which makes anything that reads it (stats
+# scrapers, log tailers) progressively slower.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/limit.conf <<EOF
+[Journal]
+SystemMaxUse=500M
+MaxRetentionSec=1week
+EOF
+systemctl restart systemd-journald
+log "journal capped at 500M / 1 week retention"
+
+# ---------------------------------------------------------------------------
 log "Waiting for Envoy to come up"
 for i in $(seq 1 30); do
   if curl -fsS "http://127.0.0.1:9901/ready" >/dev/null 2>&1; then

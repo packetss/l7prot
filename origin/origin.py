@@ -69,8 +69,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/stats":
             try:
+                # Bounded read + cached: scanning the whole journal on every
+                # request was burning CPU and slowing the origin down.
+                cache = getattr(self.server, "_stats_cache", None)
+                now = time.time()
+                if cache and now - cache[0] < 5:
+                    self._send(200, json.dumps({"stats": cache[1]}), "application/json")
+                    return
+
                 result = subprocess.run(
-                    ["journalctl", "-u", "l7ddos-envoy", "-n", "5000", "--output=cat"],
+                    ["journalctl", "-u", "l7ddos-envoy", "-n", "20000", "--output=cat"],
                     capture_output=True, text=True, timeout=2
                 )
 
@@ -91,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                         status = data.get("status")
 
                         # Skip dashboard API calls
-                        if uri.startswith("/dashboard") or uri.startswith("/api/stats"):
+                        if uri.startswith("/dashboard") or uri.startswith("/api/"):
                             continue
 
                         if status:
@@ -109,6 +117,7 @@ class Handler(BaseHTTPRequestHandler):
                     except:
                         pass
 
+                self.server._stats_cache = (now, stats)
                 self._send(200, json.dumps({"stats": stats}), "application/json")
             except Exception as e:
                 self._send(503, json.dumps({"error": str(e)}), "application/json")
