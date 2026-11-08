@@ -280,16 +280,14 @@ h1 {
       </div>
 
       <div class="stat danger">
-        <div class="stat-label">Threats Blocked</div>
+        <div class="stat-label">Threats Blocked Now</div>
         <div class="stat-value" id="stat-threats">0</div>
-        <div class="stat-unit">total mitigated</div>
+        <div class="stat-unit">active threats</div>
       </div>
     </div>
 
     <div class="narrative">
-      Your edge is defending against <span class="narrative-threat" id="narrative-threats">0</span> active threats.
-      <span class="narrative-danger" id="narrative-blocked">0</span> requests blocked,
-      <span class="narrative-danger" id="narrative-ratelimited">0</span> rate-limited.
+      Total requests blocked: <span class="narrative-danger" id="narrative-blocked">0</span>.
       System shield integrity: <span class="narrative-threat" id="narrative-health">0%</span>.
     </div>
 
@@ -348,7 +346,6 @@ async function updateStats() {
 
     document.getElementById('narrative-threats').textContent = activeThreatsDelta.toLocaleString();
     document.getElementById('narrative-blocked').textContent = blocked.toLocaleString();
-    document.getElementById('narrative-ratelimited').textContent = ratelimited.toLocaleString();
     document.getElementById('narrative-health').textContent = health + '%';
 
   } catch (err) {
