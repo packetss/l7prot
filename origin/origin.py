@@ -87,7 +87,13 @@ class Handler(BaseHTTPRequestHandler):
                 for line in result.stdout.split('\n'):
                     try:
                         data = json.loads(line)
+                        uri = data.get("uri", "")
                         status = data.get("status")
+
+                        # Skip dashboard API calls
+                        if uri.startswith("/dashboard") or uri.startswith("/api/stats"):
+                            continue
+
                         if status:
                             stats["requests_total"] += 1
                             if status == 200:
