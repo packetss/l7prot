@@ -319,7 +319,7 @@ generateStars();
 
 async function updateStats() {
   try {
-    const resp = await fetch('/api/stats');
+    const resp = await fetch('/dashboard/api/stats');
     if (!resp.ok) throw new Error('Stats API error');
 
     const data = await resp.json();
