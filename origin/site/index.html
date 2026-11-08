@@ -345,7 +345,7 @@ async function updateStats() {
     document.getElementById('stat-threats').textContent = activeThreatsDelta.toLocaleString();
 
     document.getElementById('narrative-threats').textContent = activeThreatsDelta.toLocaleString();
-    document.getElementById('narrative-blocked').textContent = threats.toLocaleString();
+    document.getElementById('narrative-blocked').textContent = (blocked + ratelimited).toLocaleString();
     document.getElementById('narrative-health').textContent = health + '%';
 
   } catch (err) {
