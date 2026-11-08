@@ -1,74 +1,365 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>L7 Protection Test Site</title>
+<title>L7 Protection — DDoS Shield</title>
 <style>
-  :root { color-scheme: dark; }
-  body {
-    margin: 0; padding: 3rem 1.5rem;
-    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: #0d1117; color: #e6edf3;
+:root {
+  color-scheme: dark;
+  --primary: #00ff88;
+  --danger: #ff0055;
+  --dark: #0a0e27;
+  --card: #161b3a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Courier New', monospace;
+  background: linear-gradient(135deg, var(--dark) 0%, #1a1f3a 100%);
+  color: #e6edf3;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.container {
+  max-width: 1200px;
+  width: 100%;
+  z-index: 10;
+  position: relative;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.logo {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 0 10px var(--primary));
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(90deg, var(--primary), #00ccff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 900;
+}
+
+.tagline {
+  color: #8b949e;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, var(--card) 0%, #1f2849 100%);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0, 255, 136, 0.1);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--primary);
+  box-shadow: 0 12px 48px rgba(0, 255, 136, 0.2);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-label {
+  color: #8b949e;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+}
+
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: 900;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 0.5rem;
+  line-height: 1;
+}
+
+.stat-value.success { color: var(--primary); }
+.stat-value.danger { color: var(--danger); }
+.stat-value.warning { color: #d29922; }
+
+.stat-unit {
+  color: #6e7681;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-right: 0.5rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--primary); }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; box-shadow: 0 0 0 20px rgba(0, 255, 136, 0); }
+}
+
+.shield-status {
+  background: linear-gradient(135deg, var(--card) 0%, #1f2849 100%);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  margin-bottom: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 255, 136, 0.1);
+}
+
+.shield-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 0 15px var(--primary));
+}
+
+.status-text {
+  font-size: 1.2rem;
+  color: var(--primary);
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.info {
+  color: #8b949e;
+  font-size: 0.9rem;
+  margin-top: 1rem;
+}
+
+.top-ips {
+  background: linear-gradient(135deg, var(--card) 0%, #1f2849 100%);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 2rem;
+  margin-top: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 255, 136, 0.1);
+}
+
+.top-ips h3 {
+  color: var(--primary);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+.ip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ip-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: rgba(0, 255, 136, 0.05);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+.ip-addr {
+  color: #58a6ff;
+  font-weight: bold;
+}
+
+.ip-count {
+  color: var(--danger);
+  font-weight: bold;
+}
+
+.loading {
+  color: #8b949e;
+  text-align: center;
+  padding: 2rem;
+}
+
+@keyframes glow {
+  0%, 100% { text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary); }
+  50% { text-shadow: 0 0 20px var(--primary), 0 0 40px var(--primary); }
+}
+
+.glow {
+  animation: glow 2s infinite;
+}
+
+/* Background animation */
+.bg-animate {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(0, 255, 136, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(0, 204, 255, 0.1) 0%, transparent 50%);
+  animation: bgShift 20s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes bgShift {
+  0%, 100% {
+    background-position: 0% 0%, 100% 100%;
   }
-  main { max-width: 780px; margin: 0 auto; }
-  h1 { font-size: 1.8rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
-  .sub { color: #8b949e; margin: 0 0 2.5rem; }
-  h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; color: #e6edf3;
-       border-bottom: 1px solid #21262d; padding-bottom: .4rem; }
-  a { color: #58a6ff; }
-  code, pre {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .875rem;
+  50% {
+    background-position: 100% 100%, 0% 0%;
   }
-  code { background: #161b22; padding: .15rem .4rem; border-radius: 5px; }
-  pre { background: #161b22; padding: 1rem; border-radius: 8px;
-       border: 1px solid #21262d; overflow-x: auto; }
-  ul { padding-left: 1.2rem; }
-  li { margin: .3rem 0; }
-  .badge {
-    display: inline-block; padding: .1rem .5rem; border-radius: 999px;
-    font-size: .75rem; font-weight: 600; background: #1f6feb33; color: #58a6ff;
-  }
+}
+
+@media (max-width: 768px) {
+  h1 { font-size: 1.8rem; }
+  .grid { grid-template-columns: 1fr; }
+  .stat-value { font-size: 2rem; }
+}
 </style>
 </head>
 <body>
-<main>
-  <h1>L7 Protection Test Site</h1>
-  <p class="sub">Served by the origin behind Envoy. Every request you see here
-     passed through the L7 filter chain.</p>
 
-  <h2>Test endpoints</h2>
-  <ul>
-    <li><a href="/api/echo">/api/echo</a> — echoes your request headers &amp; client IP</li>
-    <li><a href="/healthz">/healthz</a> — health check (bypasses rate limiting)</li>
-    <li><code>POST /api/submit</code> — POST endpoint, never cached</li>
-  </ul>
+<div class="bg-animate"></div>
 
-  <h2>Check what the edge sees</h2>
-  <pre>curl -s https://your-domain/api/echo | jq
+<div class="container">
+  <header>
+    <div class="logo">🛡️</div>
+    <h1>L7 Protection</h1>
+    <p class="tagline">Real-time DDoS Defense Network</p>
+  </header>
 
-# see the edge's view (JA4, status, flags)
-sudo tail -f /var/log/envoy/edge.log | jq .
+  <div class="shield-status">
+    <div class="shield-icon">⚔️</div>
+    <div class="status-text"><span class="pulse"></span>Shield Active</div>
+    <div class="info">Live threat monitoring and mitigation</div>
+  </div>
 
-# stats the dashboard will use
-curl -s localhost:9901/stats | grep edge_guard</pre>
+  <div class="grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Requests</div>
+      <div class="stat-value success" id="stat-total">0</div>
+      <div class="stat-unit">Processed</div>
+    </div>
 
-  <h2>Try to break it</h2>
-  <pre># rate limit (expect 429s after the burst)
-for i in $(seq 1 200); do
-  curl -s -o /dev/null -w "%{http_code}\n" https://your-domain/api/echo
-done | sort | uniq -c
+    <div class="stat-card">
+      <div class="stat-label">Blocked</div>
+      <div class="stat-value danger" id="stat-blocked">0</div>
+      <div class="stat-unit">Threats Stopped</div>
+    </div>
 
-# scanner UA (expect 403)
-curl -s -o /dev/null -w "%{http_code}\n" \
-  -A "sqlmap/1.7" https://your-domain/</pre>
+    <div class="stat-card">
+      <div class="stat-label">Rate Limited</div>
+      <div class="stat-value warning" id="stat-ratelimit">0</div>
+      <div class="stat-unit">Throttled</div>
+    </div>
 
-  <p class="sub" style="margin-top:3rem">
-    <span class="badge">Envoy</span>
-    <span class="badge">Coraza WAF</span>
-    <span class="badge">JA4</span>
-    <span class="badge">Lua edge guard</span>
-  </p>
-</main>
+    <div class="stat-card">
+      <div class="stat-label">Success Rate</div>
+      <div class="stat-value success" id="stat-success-pct">0%</div>
+      <div class="stat-unit">Legit Traffic</div>
+    </div>
+  </div>
+
+  <div class="top-ips">
+    <h3><span class="pulse"></span>Top Attack Sources</h3>
+    <div id="top-ips-list" class="ip-list">
+      <div class="loading">Loading threat data...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function updateStats() {
+  try {
+    // Try to fetch from dashboard API
+    const resp = await fetch('/dashboard/api/stats', { credentials: 'include' });
+    if (!resp.ok) throw new Error('API error');
+
+    const data = await resp.json();
+    const stats = data.stats;
+
+    const total = stats.requests_total || 0;
+    const blocked = (stats.ip_blocked || 0) + (stats.ua_blocked || 0) + (stats.suspicious_blocked || 0);
+    const ratelimited = stats.rate_limited || 0;
+    const success = stats.success_2xx || 0;
+
+    const successPct = total > 0 ? Math.round((success / total) * 100) : 0;
+
+    document.getElementById('stat-total').textContent = total.toLocaleString();
+    document.getElementById('stat-blocked').textContent = blocked.toLocaleString();
+    document.getElementById('stat-ratelimit').textContent = ratelimited.toLocaleString();
+    document.getElementById('stat-success-pct').textContent = successPct + '%';
+
+    // Top IPs
+    const topIpsHTML = data.top_ips.slice(0, 5).map(item =>
+      `<div class="ip-item"><span class="ip-addr">${escapeHtml(item.ip)}</span><span class="ip-count">${item.count} attacks</span></div>`
+    ).join('');
+    document.getElementById('top-ips-list').innerHTML = topIpsHTML || '<div class="loading">No threats yet</div>';
+
+  } catch (err) {
+    console.error('Failed to fetch stats:', err);
+    document.getElementById('top-ips-list').innerHTML = '<div class="loading">Dashboard unavailable</div>';
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Update every 3 seconds
+setInterval(updateStats, 3000);
+updateStats();
+</script>
+
 </body>
 </html>
