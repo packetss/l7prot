@@ -248,7 +248,9 @@ async def api_events(request):
 async def logout(request):
     session = await aiohttp_session.get_session(request)
     session.clear()
-    return web.HTTPFound("/dashboard/login")
+    response = web.HTTPFound("/dashboard/login")
+    response.del_cookie('AIOHTTP_SESSION')
+    return response
 
 
 def create_app():
