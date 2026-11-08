@@ -107,8 +107,20 @@ static_resources:
                   - name: backend
                     domains: ["*"]
                     routes:
-                      # Dashboard route - proxied to localhost:8888
+                      # Dashboard routes - proxied to localhost:8888
                       - match: { prefix: "/dashboard" }
+                        route:
+                          cluster: dashboard
+                          timeout: 30s
+                      - match: { prefix: "/api/stats" }
+                        route:
+                          cluster: dashboard
+                          timeout: 30s
+                      - match: { prefix: "/api/events" }
+                        route:
+                          cluster: dashboard
+                          timeout: 30s
+                      - match: { prefix: "/api/logout" }
                         route:
                           cluster: dashboard
                           timeout: 30s
