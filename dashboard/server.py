@@ -139,7 +139,7 @@ button:hover { background: #2ea043; }
 <body>
 <div class="login-box">
 <h1>🛡️ L7 Protection</h1>
-<form method="POST" action="/login">
+<form method="POST" action="/dashboard/login">
 <input type="text" name="username" placeholder="Username" required autofocus>
 <input type="password" name="password" placeholder="Password" required>
 <button type="submit">Login</button>
@@ -158,7 +158,7 @@ async def login_post(request):
     if username == DASHBOARD_USER and password == DASHBOARD_PASS:
         session = await aiohttp_session.get_session(request)
         session["authenticated"] = True
-        return web.HTTPFound("/")
+        return web.HTTPFound("/dashboard")
 
     return web.Response(text="Invalid credentials", status=401)
 
@@ -166,7 +166,7 @@ async def login_post(request):
 async def require_auth(request):
     session = await aiohttp_session.get_session(request)
     if not session.get("authenticated"):
-        raise web.HTTPFound("/login")
+        raise web.HTTPFound("/dashboard/login")
 
 
 async def dashboard(request):
@@ -211,12 +211,13 @@ def create_app():
     aiohttp_session.setup(app, EncryptedCookieStorage(SECRET_KEY.encode()[:32]))
 
     # Routes
-    app.router.add_get("/login", login_page)
-    app.router.add_post("/login", login_post)
-    app.router.add_get("/logout", logout)
-    app.router.add_get("/", dashboard)
-    app.router.add_get("/api/stats", api_stats)
-    app.router.add_get("/api/events", api_events)
+    app.router.add_get("/dashboard/login", login_page)
+    app.router.add_post("/dashboard/login", login_post)
+    app.router.add_get("/dashboard/logout", logout)
+    app.router.add_get("/dashboard", dashboard)
+    app.router.add_get("/dashboard/", dashboard)
+    app.router.add_get("/dashboard/api/stats", api_stats)
+    app.router.add_get("/dashboard/api/events", api_events)
 
     # Start log tailer
     app.on_startup.append(lambda _: asyncio.create_task(tail_envoy_logs()))
