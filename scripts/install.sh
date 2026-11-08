@@ -158,8 +158,15 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+# ---------------------------------------------------------------------------
+log "Installing dashboard"
+bash "$SRC_DIR/dashboard/install-dashboard.sh"
+
 echo
 log "Done. Next steps:"
 echo "  1. Get a TLS cert:  DOMAIN=$DOMAIN ./scripts/get-cert.sh"
-echo "  2. Verify:          DOMAIN=$DOMAIN ./scripts/test.sh"
-echo "  3. Read the guide:  cat README.md"
+echo "  2. Set dashboard password (if not already):"
+echo "     sudo cp /etc/l7dashboard.env.example /etc/l7dashboard.env"
+echo "     sudo nano /etc/l7dashboard.env && sudo systemctl restart l7dashboard"
+echo "  3. Verify:          DOMAIN=$DOMAIN ./scripts/test.sh"
+echo "  4. Read the guide:  cat README.md"

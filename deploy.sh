@@ -28,7 +28,7 @@ ok()   { echo -e "  \033[1;32m✓\033[0m $*"; }
 [ "$EUID" -eq 0 ] || die "This script must be run as root (use sudo)"
 
 # ===========================================================================
-log "Step 1/5: Installing packages"
+log "Step 1/8: Installing packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
@@ -38,7 +38,7 @@ apt-get install -y -qq \
   ufw
 
 # ===========================================================================
-log "Step 2/5: Installing Envoy (contrib) and Coraza WAF"
+log "Step 2/8: Installing Envoy (contrib) and Coraza WAF"
 ENVOY_VER="${ENVOY_VER:-1.35.0}"
 CORAZA_VER="${CORAZA_VER:-0.6.0}"
 
@@ -65,7 +65,7 @@ else
 fi
 
 # ===========================================================================
-log "Step 3/5: Installing configs and origin app"
+log "Step 3/8: Installing configs and origin app"
 
 mkdir -p /etc/envoy/lua /etc/envoy/coraza /var/log/envoy /var/lib/l7ddos
 cp "$SRC_DIR/envoy/envoy.yaml"          /etc/envoy/envoy.yaml
@@ -81,7 +81,7 @@ chown -R "$USER_NAME":"$USER_NAME" /var/lib/l7ddos
 ok "Origin app installed"
 
 # ===========================================================================
-log "Step 4/5: Setting up systemd services"
+log "Step 4/8: Setting up systemd services"
 
 cat > /etc/systemd/system/l7ddos-origin.service <<'EOF'
 [Unit]
@@ -141,7 +141,7 @@ for i in $(seq 1 30); do
 done
 
 # ===========================================================================
-log "Step 5/5: Getting TLS certificate"
+log "Step 5/8: Getting TLS certificate"
 
 systemctl stop l7ddos-envoy || true
 sleep 2
@@ -235,8 +235,40 @@ sleep 2
 
 ok "Auto-renewal configured"
 
+# ---------------------------------------------------------------------------
+log "Capping journal size"
+# The Envoy access log is extremely chatty under attack. Without a cap the
+# journal grows without bound, which makes anything that reads it (stats
+# scrapers, log tailers) progressively slower.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/limit.conf <<EOF
+[Journal]
+SystemMaxUse=500M
+MaxRetentionSec=1week
+EOF
+systemctl restart systemd-journald
+ok "Journal capped at 500M / 1 week retention"
+
+# ---------------------------------------------------------------------------
+log "Step 6/8: Capping journal size"
+# The Envoy access log is extremely chatty under attack. Without a cap the
+# journal grows without bound, which makes anything that reads it (stats
+# scrapers, log tailers) progressively slower.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/limit.conf <<EOF
+[Journal]
+SystemMaxUse=500M
+MaxRetentionSec=1week
+EOF
+systemctl restart systemd-journald
+ok "Journal capped at 500M / 1 week retention"
+
+# ---------------------------------------------------------------------------
+log "Step 7/8: Installing dashboard"
+bash "$SRC_DIR/dashboard/install-dashboard.sh"
+
 # ===========================================================================
-log "Configuring firewall"
+log "Step 8/8: Configuring firewall"
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -276,6 +308,35 @@ test_hdr "4. Scanner User-Agents blocked"
 c=$(code -A "sqlmap/1.7" "$BASE/")
 if [ "$c" = "403" ]; then ok_test "sqlmap blocked"; else fail_test "sqlmap got $c"; fi
 
+test_hdr "5. Dashboard reachable"
+c=$(code "$BASE/dashboard/login")
+if [ "$c" = "200" ]; then ok_test "dashboard login page loads"; else fail_test "dashboard got $c"; fi
+
+test_hdr "6. Public stats endpoint works"
+stats=$(curl -s --max-time 5 "$BASE/api/public-stats" 2>/dev/null)
+if echo "$stats" | grep -q '"requests_total"'; then
+  ok_test "public stats returns JSON"
+else
+  fail_test "public stats endpoint broken"
+fi
+
+test_hdr "7. Public stats responds quickly (not blocked on journal scan)"
+t=$(curl -s -o /dev/null -w "%{time_total}" --max-time 10 "$BASE/api/public-stats" 2>/dev/null)
+if [ -n "$t" ] && awk "BEGIN{exit !($t < 1.0)}"; then
+  ok_test "public stats responded in ${t}s"
+else
+  fail_test "public stats took ${t}s (too slow)"
+fi
+
+test_hdr "8. Services enabled (survive reboot)"
+for svc in l7ddos-origin l7ddos-envoy l7dashboard; do
+  if systemctl is-enabled "$svc" >/dev/null 2>&1; then
+    ok_test "$svc enabled"
+  else
+    fail_test "$svc not enabled"
+  fi
+done
+
 echo
 echo -e "\033[1;36m===== $pass passed, $fail failed =====\033[0m"
 
@@ -284,9 +345,18 @@ echo
 log "🎉 Deployment complete!"
 echo
 echo "Your site is live at: https://${DOMAIN}"
+echo "Dashboard at:         https://${DOMAIN}/dashboard"
 echo
+if [ ! -f /etc/l7dashboard.env ]; then
+  echo "IMPORTANT: set your dashboard password:"
+  echo "  sudo cp /etc/l7dashboard.env.example /etc/l7dashboard.env"
+  echo "  sudo nano /etc/l7dashboard.env   # set DASHBOARD_PASS"
+  echo "  sudo systemctl restart l7dashboard"
+  echo
+fi
 echo "Monitor stats:"
 echo "  curl -s localhost:9901/stats | grep edge_guard"
+echo "  curl -s ${DOMAIN}/api/public-stats"
 echo
 echo "Watch logs:"
 echo "  journalctl -u l7ddos-envoy -f"

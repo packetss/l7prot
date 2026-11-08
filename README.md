@@ -47,8 +47,13 @@ origin/
   site/index.html       the test site
 scripts/
   install.sh            one-shot VPS setup
+  update.sh             pull new code onto a running server and redeploy it
   tune.sh               change thresholds (edits Lua + restarts Envoy)
   test.sh               verifies each layer actually fires
+dashboard/
+  server.py             dashboard API + public stats endpoint
+  dashboard.html        dashboard UI
+  install-dashboard.sh  install/update the dashboard (idempotent)
 test_edge_guard.lua     unit tests for the Lua filter (no Envoy needed)
 ```
 
@@ -80,12 +85,52 @@ sudo ./deploy.sh your.domain.com [email@optional.com]
 That's it. The script handles everything:
 - Installs Envoy (contrib), Coraza WAF, and all dependencies
 - Sets up the origin app and systemd services
+- Installs the dashboard (login, live stats, event feed, attacker tracking)
 - Gets a Let's Encrypt certificate (DNS must point to your VPS first)
+- Caps the journal at 500M / 1 week so log readers stay fast under attack
 - Configures the firewall (only 22/80/443 open)
 - Runs verification tests
 - Sets up auto-renewal for the cert
 
-Your site will be live at `https://your.domain.com` when done.
+Your site will be live at `https://your.domain.com` when done, and the
+dashboard at `https://your.domain.com/dashboard`.
+
+If the dashboard password isn't set yet, the deploy script tells you at the
+end — you can also do it later:
+
+```bash
+sudo cp /etc/l7dashboard.env.example /etc/l7dashboard.env
+sudo nano /etc/l7dashboard.env      # set DASHBOARD_PASS
+sudo systemctl restart l7dashboard
+```
+
+### Updating an existing server
+
+After you push changes to the repo, pull them down and redeploy everything
+with one command:
+
+```bash
+cd ~/l7prot && sudo ./scripts/update.sh
+```
+
+This pulls the latest code, copies the origin app, dashboard and Envoy
+config into place (preserving your certificate paths), validates the Envoy
+config before restarting, and reports the status of every service. It's
+idempotent and safe to run on a live server.
+
+### Surviving a reboot
+
+All three services are `systemctl enable`d by the installer, so they come
+back automatically after a reboot or a VPS restart:
+
+| Service | What it does |
+|---|---|
+| `l7ddos-origin` | The origin app on 127.0.0.1:8080 |
+| `l7ddos-envoy` | The L7 edge (TLS, WAF, rate limiting, cache) |
+| `l7dashboard` | The dashboard + public stats endpoint |
+
+Cumulative attack counters live in `/opt/l7dashboard/stats.json`, so the
+totals survive restarts too.
 
 ## Manual Install (step-by-step)
 
@@ -96,6 +141,7 @@ git clone https://github.com/packetss/l7prot.git
 cd l7prot
 DOMAIN=your.domain.com ./scripts/install.sh
 DOMAIN=your.domain.com ./scripts/get-cert.sh
+sudo ./dashboard/install-dashboard.sh
 DOMAIN=your.domain.com ./scripts/test.sh
 ```
 

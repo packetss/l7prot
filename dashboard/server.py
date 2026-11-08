@@ -34,8 +34,9 @@ ENVOY_ADMIN = "http://127.0.0.1:9901"
 STATS_CACHE_SECONDS = 2
 
 # Persistent stats file — cumulative counters survive restarts.
-# Path is configurable so it can live on a writable dir in production.
-STATS_FILE = Path(os.getenv("DASHBOARD_STATS_FILE", "/var/lib/l7ddos/stats.json"))
+# Defaults to the dashboard's own directory (the dashboard service runs as
+# l7dashboard with ReadWritePaths=/opt/l7dashboard).
+STATS_FILE = Path(os.getenv("DASHBOARD_STATS_FILE", "/opt/l7dashboard/stats.json"))
 STATS_SAVE_INTERVAL = 5  # seconds between counter flushes to disk
 
 # In-memory event storage
