@@ -20,7 +20,7 @@ import json
 import os
 import socket
 import time
-import urllib.request
+import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "127.0.0.1"          # deliberately loopback-only
@@ -69,11 +69,41 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/stats":
             try:
-                req = urllib.request.Request("http://127.0.0.1:8888/dashboard/api/stats")
-                req.add_header('Cookie', 'AIOHTTP_SESSION=dummy')
-                with urllib.request.urlopen(req, timeout=2) as resp:
-                    stats_data = json.loads(resp.read().decode())
-                self._send(200, json.dumps(stats_data), "application/json")
+                result = subprocess.run(
+                    ["journalctl", "-u", "l7ddos-envoy", "-n", "5000", "--output=cat"],
+                    capture_output=True, text=True, timeout=2
+                )
+
+                stats = {
+                    "requests_total": 0,
+                    "success_2xx": 0,
+                    "ip_blocked": 0,
+                    "ua_blocked": 0,
+                    "suspicious_blocked": 0,
+                    "rate_limited": 0,
+                    "auto_banned": 0,
+                }
+
+                for line in result.stdout.split('\n'):
+                    try:
+                        data = json.loads(line)
+                        status = data.get("status")
+                        if status:
+                            stats["requests_total"] += 1
+                            if status == 200:
+                                stats["success_2xx"] += 1
+                            elif status == 403:
+                                stats["ip_blocked"] += 1
+                            elif status == 429:
+                                stats["rate_limited"] += 1
+
+                            flags = data.get("flags", "")
+                            if "banned" in flags.lower():
+                                stats["auto_banned"] += 1
+                    except:
+                        pass
+
+                self._send(200, json.dumps({"stats": stats}), "application/json")
             except Exception as e:
                 self._send(503, json.dumps({"error": str(e)}), "application/json")
             return
