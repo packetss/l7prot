@@ -304,17 +304,20 @@ def get_journal_stats():
 async def api_public_stats(request):
     """Public stats endpoint - no auth required, reads cumulative from journal"""
     stats = get_journal_stats()
-    return web.json_response({
-        "stats": {
-            "requests_total": stats.get("requests_total", 0),
-            "success_2xx": stats.get("success_2xx", 0),
-            "ip_blocked": stats.get("ip_blocked", 0),
-            "ua_blocked": stats.get("ua_blocked", 0),
-            "suspicious_blocked": stats.get("suspicious_blocked", 0),
-            "rate_limited": stats.get("rate_limited", 0),
-            "auto_banned": stats.get("auto_banned", 0),
-        }
-    })
+    return web.json_response(
+        {
+            "stats": {
+                "requests_total": stats.get("requests_total", 0),
+                "success_2xx": stats.get("success_2xx", 0),
+                "ip_blocked": stats.get("ip_blocked", 0),
+                "ua_blocked": stats.get("ua_blocked", 0),
+                "suspicious_blocked": stats.get("suspicious_blocked", 0),
+                "rate_limited": stats.get("rate_limited", 0),
+                "auto_banned": stats.get("auto_banned", 0),
+            }
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def logout(request):
