@@ -3,139 +3,209 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>L7 Protection — DDoS Defense</title>
+<title>L7 Protection Shield</title>
 <style>
-:root {
-  color-scheme: dark;
-  --primary: #00ff88;
-  --secondary: #00ccff;
-  --danger: #ff0055;
-  --dark: #0a0e27;
-  --card: #161b3a;
-}
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
   width: 100%;
   height: 100%;
-  overflow: hidden;
 }
 
 body {
-  font-family: 'Courier New', 'Courier', monospace;
-  background: #000;
-  color: #e6edf3;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0a0e27;
+  color: #fff;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
   position: relative;
+  overflow: hidden;
 }
 
-.bg-grid {
+.bg {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  background-image:
-    linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
-  z-index: 0;
-  animation: gridShift 20s linear infinite;
-}
-
-@keyframes gridShift {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(50px); }
-}
-
-.bg-glow {
-  position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
+  right: 0;
+  bottom: 0;
   background:
     radial-gradient(circle at 20% 50%, rgba(0, 255, 136, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(0, 204, 255, 0.15) 0%, transparent 50%);
+    radial-gradient(circle at 80% 80%, rgba(0, 204, 255, 0.1) 0%, transparent 50%);
   z-index: 0;
-  pointer-events: none;
-  animation: glowFloat 30s ease-in-out infinite;
+  animation: bgShift 20s ease-in-out infinite;
 }
 
-@keyframes glowFloat {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(50px, 50px); }
+@keyframes bgShift {
+  0%, 100% { background-position: 0% 0%, 100% 100%; }
+  50% { background-position: 100% 100%, 0% 0%; }
 }
 
 .container {
   position: relative;
   z-index: 10;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  max-width: 900px;
   padding: 2rem;
-  overflow-y: auto;
 }
 
 header {
-  text-align: center;
-  margin-bottom: 3rem;
-  animation: fadeInDown 0.8s ease;
+  margin-bottom: 4rem;
+  animation: slideDown 0.8s ease;
 }
 
 .logo {
-  font-size: 4rem;
-  margin-bottom: 0.5rem;
-  filter: drop-shadow(0 0 20px var(--primary));
-  animation: float 3s ease-in-out infinite;
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.5));
+  animation: pulse-glow 2s ease-in-out infinite;
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-20px); }
+@keyframes pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.5)); }
+  50% { filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.8)); }
 }
 
 h1 {
-  font-size: 3.5rem;
-  margin-bottom: 0.5rem;
-  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  font-size: 2.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  font-weight: 900;
-  text-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
 }
 
 .tagline {
-  color: var(--secondary);
-  font-size: 1.1rem;
-  letter-spacing: 0.1em;
-  margin-bottom: 1rem;
-}
-
-.live-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--primary);
-  font-size: 0.9rem;
-  text-transform: uppercase;
+  color: #8b949e;
+  font-size: 1rem;
+  font-weight: 400;
   letter-spacing: 0.05em;
 }
 
+.hero-stat {
+  background: linear-gradient(135deg, rgba(22, 27, 58, 0.6) 0%, rgba(31, 40, 73, 0.6) 100%);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 20px;
+  padding: 4rem 3rem;
+  margin-bottom: 3rem;
+  backdrop-filter: blur(10px);
+  animation: slideUp 0.8s ease;
+  transition: all 0.3s ease;
+}
+
+.hero-stat:hover {
+  border-color: rgba(0, 255, 136, 0.5);
+  box-shadow: 0 0 30px rgba(0, 255, 136, 0.2), inset 0 0 30px rgba(0, 255, 136, 0.05);
+  transform: translateY(-5px);
+}
+
+.hero-label {
+  color: #8b949e;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.hero-value {
+  font-size: 4.5rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+  line-height: 1;
+  text-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+}
+
+.hero-description {
+  color: #8b949e;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.stat-box {
+  background: linear-gradient(135deg, rgba(22, 27, 58, 0.5) 0%, rgba(31, 40, 73, 0.5) 100%);
+  border: 1px solid rgba(0, 255, 136, 0.15);
+  border-radius: 12px;
+  padding: 2rem;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  animation: slideUp 0.8s ease backwards;
+}
+
+.stat-box:nth-child(1) { animation-delay: 0.2s; }
+.stat-box:nth-child(2) { animation-delay: 0.3s; }
+.stat-box:nth-child(3) { animation-delay: 0.4s; }
+.stat-box:nth-child(4) { animation-delay: 0.5s; }
+
+.stat-box:hover {
+  border-color: rgba(0, 255, 136, 0.4);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.2), inset 0 0 20px rgba(0, 255, 136, 0.03);
+  transform: translateY(-3px);
+}
+
+.stat-box-label {
+  color: #8b949e;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.stat-box-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #00ff88;
+  margin-bottom: 0.25rem;
+}
+
+.stat-box.danger .stat-box-value {
+  color: #ff0055;
+}
+
+.stat-box.warning .stat-box-value {
+  color: #d29922;
+}
+
+.footer {
+  color: #6e7681;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  animation: fadeIn 1s ease 0.8s backwards;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #00ff88;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 1rem;
+}
+
 .pulse-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--primary);
-  animation: pulse 1s infinite;
-  box-shadow: 0 0 10px var(--primary);
+  background: #00ff88;
+  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 10px #00ff88;
 }
 
 @keyframes pulse {
@@ -143,31 +213,21 @@ h1 {
   50% { opacity: 0.3; }
 }
 
-.stats-wrapper {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
-  width: 100%;
-  max-width: 1400px;
-  margin-bottom: 3rem;
-}
-
-.stat-card {
-  background: linear-gradient(135deg, rgba(22, 27, 58, 0.8) 0%, rgba(31, 40, 73, 0.8) 100%);
-  border: 2px solid rgba(0, 255, 136, 0.2);
-  border-radius: 16px;
-  padding: 2.5rem;
-  position: relative;
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation: slideUp 0.8s ease both;
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(40px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -175,240 +235,73 @@ h1 {
   }
 }
 
-.stat-card:nth-child(1) { animation-delay: 0.1s; }
-.stat-card:nth-child(2) { animation-delay: 0.2s; }
-.stat-card:nth-child(3) { animation-delay: 0.3s; }
-.stat-card:nth-child(4) { animation-delay: 0.4s; }
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.1), transparent);
-  transition: left 0.5s;
-}
-
-.stat-card:hover::before {
-  left: 100%;
-}
-
-.stat-card:hover {
-  transform: translateY(-10px);
-  border-color: var(--primary);
-  box-shadow:
-    0 0 20px rgba(0, 255, 136, 0.3),
-    0 0 40px rgba(0, 204, 255, 0.2),
-    inset 0 0 20px rgba(0, 255, 136, 0.05);
-}
-
-.stat-label {
-  color: var(--secondary);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  margin-bottom: 1rem;
-  font-weight: 700;
-}
-
-.stat-value {
-  font-size: 3rem;
-  font-weight: 900;
-  font-family: 'Courier New', monospace;
-  margin-bottom: 0.5rem;
-  line-height: 1;
-  color: var(--primary);
-  text-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
-}
-
-.stat-card.danger .stat-value {
-  color: var(--danger);
-  text-shadow: 0 0 15px rgba(255, 0, 85, 0.4);
-}
-
-.stat-card.warning .stat-value {
-  color: #d29922;
-  text-shadow: 0 0 15px rgba(210, 153, 34, 0.4);
-}
-
-.stat-unit {
-  color: #6e7681;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.threats-section {
-  width: 100%;
-  max-width: 1400px;
-  background: linear-gradient(135deg, rgba(22, 27, 58, 0.8) 0%, rgba(31, 40, 73, 0.8) 100%);
-  border: 2px solid rgba(0, 255, 136, 0.2);
-  border-radius: 16px;
-  padding: 2.5rem;
-  backdrop-filter: blur(10px);
-  animation: slideUp 0.8s ease 0.5s both;
-}
-
-.threats-title {
-  color: var(--primary);
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  margin-bottom: 2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.threat-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--danger);
-  animation: pulse 1s infinite;
-  box-shadow: 0 0 10px var(--danger);
-}
-
-.threats-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1.5rem;
-}
-
-.threat-item {
-  background: rgba(0, 0, 0, 0.3);
-  border-left: 3px solid var(--danger);
-  border-radius: 8px;
-  padding: 1.5rem;
-  transition: all 0.3s ease;
-  animation: slideUp 0.6s ease forwards;
-  opacity: 0;
-}
-
-.threat-item:nth-child(1) { animation-delay: 0.6s; }
-.threat-item:nth-child(2) { animation-delay: 0.65s; }
-.threat-item:nth-child(3) { animation-delay: 0.7s; }
-.threat-item:nth-child(4) { animation-delay: 0.75s; }
-.threat-item:nth-child(5) { animation-delay: 0.8s; }
-
-.threat-item:hover {
-  background: rgba(0, 0, 0, 0.5);
-  border-left-color: var(--primary);
-  transform: translateX(5px);
-}
-
-.threat-ip {
-  color: #58a6ff;
-  font-weight: bold;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-  font-family: 'Courier New', monospace;
-}
-
-.threat-count {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.threat-label {
-  color: #8b949e;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.threat-num {
-  color: var(--danger);
-  font-weight: bold;
-  font-size: 1.2rem;
-  text-shadow: 0 0 10px rgba(255, 0, 85, 0.3);
-}
-
-.loading {
-  color: var(--secondary);
-  text-align: center;
-  padding: 2rem;
-  font-style: italic;
-}
-
-@media (max-width: 1024px) {
-  h1 { font-size: 2.5rem; }
-  .stats-wrapper { grid-template-columns: repeat(2, 1fr); }
-  .threats-list { grid-template-columns: 1fr; }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 768px) {
-  h1 { font-size: 2rem; }
-  .logo { font-size: 3rem; }
-  .stat-value { font-size: 2.2rem; }
-  .stats-wrapper { grid-template-columns: 1fr; }
+  h1 { font-size: 1.8rem; }
+  .logo { font-size: 2.5rem; }
+  .hero-value { font-size: 3rem; }
+  .hero-stat { padding: 2.5rem 1.5rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
 }
 
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@media (max-width: 480px) {
+  h1 { font-size: 1.5rem; }
+  .logo { font-size: 2rem; }
+  .hero-value { font-size: 2.2rem; }
+  .hero-stat { padding: 2rem 1rem; }
+  .stats-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
 
-<div class="bg-grid"></div>
-<div class="bg-glow"></div>
+<div class="bg"></div>
 
 <div class="container">
   <header>
     <div class="logo">🛡️</div>
-    <h1>L7 PROTECTION</h1>
-    <p class="tagline">Neural Defense Network</p>
-    <div class="live-status">
-      <span class="pulse-dot"></span>
-      Live Monitoring Active
-    </div>
+    <h1>L7 Protection</h1>
+    <p class="tagline">Real-Time Defense Network</p>
   </header>
 
-  <div class="stats-wrapper">
-    <div class="stat-card">
-      <div class="stat-label">Total Requests</div>
-      <div class="stat-value" id="stat-total">0</div>
-      <div class="stat-unit">Processed</div>
-    </div>
-
-    <div class="stat-card danger">
-      <div class="stat-label">Blocked</div>
-      <div class="stat-value" id="stat-blocked">0</div>
-      <div class="stat-unit">Threats Mitigated</div>
-    </div>
-
-    <div class="stat-card warning">
-      <div class="stat-label">Rate Limited</div>
-      <div class="stat-value" id="stat-ratelimit">0</div>
-      <div class="stat-unit">Throttled</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-label">Success Rate</div>
-      <div class="stat-value" id="stat-success-pct">0%</div>
-      <div class="stat-unit">Legitimate Traffic</div>
+  <div class="hero-stat">
+    <div class="hero-label">Threats Blocked Right Now</div>
+    <div class="hero-value" id="threats-count">0</div>
+    <div class="hero-description">Active threat mitigation in progress</div>
+    <div class="status-indicator">
+      <span class="pulse-dot"></span>
+      Shield Active
     </div>
   </div>
 
-  <div class="threats-section">
-    <div class="threats-title">
-      <span class="threat-dot"></span>
-      Top Attack Sources
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="stat-box-label">Total Processed</div>
+      <div class="stat-box-value" id="stat-total">0</div>
     </div>
-    <div id="top-ips-list" class="threats-list">
-      <div class="loading">Analyzing threat intelligence...</div>
+
+    <div class="stat-box danger">
+      <div class="stat-box-label">Blocked</div>
+      <div class="stat-box-value" id="stat-blocked">0</div>
     </div>
+
+    <div class="stat-box warning">
+      <div class="stat-box-label">Rate Limited</div>
+      <div class="stat-box-value" id="stat-ratelimit">0</div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-label">Success %</div>
+      <div class="stat-box-value" id="stat-success-pct">0%</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Powered by Envoy • Coraza WAF • Edge Guard</p>
   </div>
 </div>
 
@@ -436,7 +329,9 @@ async function updateStats() {
     }
 
     const successPct = total > 0 ? Math.round((success / total) * 100) : 0;
+    const threatsBlocked = blocked + ratelimited;
 
+    document.getElementById('threats-count').textContent = threatsBlocked.toLocaleString();
     document.getElementById('stat-total').textContent = total.toLocaleString();
     document.getElementById('stat-blocked').textContent = blocked.toLocaleString();
     document.getElementById('stat-ratelimit').textContent = ratelimited.toLocaleString();
@@ -447,42 +342,8 @@ async function updateStats() {
   }
 }
 
-async function updateThreats() {
-  try {
-    const resp = await fetch('/dashboard/api/stats', { credentials: 'include' });
-    if (!resp.ok) throw new Error('Dashboard API error');
-
-    const data = await resp.json();
-    const topIps = data.top_ips || [];
-
-    const html = topIps.slice(0, 5).map(item => `
-      <div class="threat-item">
-        <div class="threat-ip">${escapeHtml(item.ip)}</div>
-        <div class="threat-count">
-          <span class="threat-label">Attack Attempts</span>
-          <span class="threat-num">${item.count}</span>
-        </div>
-      </div>
-    `).join('');
-
-    document.getElementById('top-ips-list').innerHTML = html || '<div class="loading">No threats detected</div>';
-
-  } catch (err) {
-    console.error('Failed to fetch threats:', err);
-  }
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 setInterval(updateStats, 2000);
 updateStats();
-
-setInterval(updateThreats, 3000);
-updateThreats();
 </script>
 
 </body>
