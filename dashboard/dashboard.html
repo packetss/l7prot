@@ -208,7 +208,7 @@ function esc(str) {
 
 async function updateStats() {
   try {
-    const resp = await fetch('/api/stats');
+    const resp = await fetch('/dashboard/api/stats');
     const data = await resp.json();
 
     $$('#stat-total').textContent = data.stats.requests_total || 0;
@@ -236,7 +236,7 @@ async function updateStats() {
 
 async function updateEvents() {
   try {
-    const resp = await fetch('/api/events');
+    const resp = await fetch('/dashboard/api/events');
     const events = await resp.json();
 
     const eventsHTML = events.reverse().slice(0, 50).map(e => {
