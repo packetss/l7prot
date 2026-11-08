@@ -100,7 +100,6 @@ static_resources:
                       - match: { prefix: "/dashboard" }
                         route:
                           cluster: dashboard
-                          prefix_rewrite: "/"
                           timeout: 30s
                       # Default route - origin
                       - match: { prefix: "/" }
