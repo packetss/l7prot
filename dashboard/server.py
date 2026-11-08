@@ -206,7 +206,17 @@ async def dashboard(request):
 
 async def api_stats(request):
     await require_auth(request)
-    stats = await get_envoy_stats()
+
+    # Use stats tracked from logs, not Envoy admin API
+    stats = {
+        "requests_total": stats_cache.get("requests_total", 0),
+        "success_2xx": stats_cache.get("success_2xx", 0),
+        "ip_blocked": stats_cache.get("ip_blocked", 0),
+        "ua_blocked": stats_cache.get("ua_blocked", 0),
+        "suspicious_blocked": stats_cache.get("suspicious_blocked", 0),
+        "rate_limited": stats_cache.get("rate_limited", 0),
+        "auto_banned": stats_cache.get("auto_banned", 0),
+    }
 
     # Top IPs
     top_ips = sorted(ip_counters.items(), key=lambda x: x[1], reverse=True)[:10]
