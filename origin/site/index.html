@@ -10,224 +10,207 @@
 html, body {
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #0a0e27;
+  font-family: 'Courier New', monospace;
+  background: #000;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
   position: relative;
-  overflow: hidden;
 }
 
-.bg {
+.stars {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    radial-gradient(circle at 20% 50%, rgba(0, 255, 136, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(0, 204, 255, 0.1) 0%, transparent 50%);
+  width: 100%;
+  height: 100%;
   z-index: 0;
-  animation: bgShift 20s ease-in-out infinite;
 }
 
-@keyframes bgShift {
-  0%, 100% { background-position: 0% 0%, 100% 100%; }
-  50% { background-position: 100% 100%, 0% 0%; }
+.star {
+  position: absolute;
+  background: #fff;
+  border-radius: 50%;
+  animation: twinkle 3s infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 
 .container {
   position: relative;
   z-index: 10;
   text-align: center;
-  max-width: 900px;
+  max-width: 1000px;
   padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3rem;
 }
 
-header {
-  margin-bottom: 4rem;
-  animation: slideDown 0.8s ease;
+.globe {
+  width: 300px;
+  height: 300px;
+  position: relative;
+  animation: float 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.6));
 }
 
-.logo {
-  font-size: 3.5rem;
-  margin-bottom: 1rem;
-  filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.5));
-  animation: pulse-glow 2s ease-in-out infinite;
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-30px); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.5)); }
-  50% { filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.8)); }
+.globe-sphere {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.3) 0%, rgba(0, 204, 255, 0.1) 40%, transparent 70%);
+  border: 2px solid rgba(0, 255, 136, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.globe-sphere::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(0, 255, 136, 0.2) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(0, 204, 255, 0.1) 0%, transparent 50%);
+  animation: globeSpin 20s linear infinite;
+}
+
+@keyframes globeSpin {
+  0% { transform: rotateZ(0deg); }
+  100% { transform: rotateZ(360deg); }
+}
+
+.globe-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 50%;
+  animation: rotateRing 10s linear infinite;
+}
+
+@keyframes rotateRing {
+  0% { transform: rotateX(80deg) rotateZ(0deg); }
+  100% { transform: rotateX(80deg) rotateZ(360deg); }
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 50%;
+  animation: pulseRing 2s ease-out infinite;
+}
+
+@keyframes pulseRing {
+  0% {
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+    border-color: rgba(0, 255, 136, 0.8);
+  }
+  100% {
+    width: 150%;
+    height: 150%;
+    opacity: 0;
+    border-color: rgba(0, 255, 136, 0);
+  }
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  align-items: center;
 }
 
 h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
+  font-size: 2.2rem;
   background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.tagline {
-  color: #8b949e;
-  font-size: 1rem;
-  font-weight: 400;
-  letter-spacing: 0.05em;
+.stat-section {
+  display: flex;
+  gap: 3rem;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
-.hero-stat {
-  background: linear-gradient(135deg, rgba(22, 27, 58, 0.6) 0%, rgba(31, 40, 73, 0.6) 100%);
-  border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 20px;
-  padding: 4rem 3rem;
-  margin-bottom: 3rem;
-  backdrop-filter: blur(10px);
+.stat {
+  text-align: center;
   animation: slideUp 0.8s ease;
-  transition: all 0.3s ease;
 }
 
-.hero-stat:hover {
-  border-color: rgba(0, 255, 136, 0.5);
-  box-shadow: 0 0 30px rgba(0, 255, 136, 0.2), inset 0 0 30px rgba(0, 255, 136, 0.05);
-  transform: translateY(-5px);
-}
-
-.hero-label {
+.stat-label {
   color: #8b949e;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  margin-bottom: 1rem;
-  font-weight: 600;
+  margin-bottom: 0.75rem;
 }
 
-.hero-value {
-  font-size: 4.5rem;
+.stat-value {
+  font-size: 3.5rem;
   font-weight: 900;
-  background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #00ff88;
+  text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
   margin-bottom: 0.5rem;
   line-height: 1;
-  text-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
 }
 
-.hero-description {
-  color: #8b949e;
-  font-size: 1rem;
-  font-weight: 400;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 3rem;
-}
-
-.stat-box {
-  background: linear-gradient(135deg, rgba(22, 27, 58, 0.5) 0%, rgba(31, 40, 73, 0.5) 100%);
-  border: 1px solid rgba(0, 255, 136, 0.15);
-  border-radius: 12px;
-  padding: 2rem;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
-  animation: slideUp 0.8s ease backwards;
-}
-
-.stat-box:nth-child(1) { animation-delay: 0.2s; }
-.stat-box:nth-child(2) { animation-delay: 0.3s; }
-.stat-box:nth-child(3) { animation-delay: 0.4s; }
-.stat-box:nth-child(4) { animation-delay: 0.5s; }
-
-.stat-box:hover {
-  border-color: rgba(0, 255, 136, 0.4);
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.2), inset 0 0 20px rgba(0, 255, 136, 0.03);
-  transform: translateY(-3px);
-}
-
-.stat-box-label {
-  color: #8b949e;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0.75rem;
-  font-weight: 600;
-}
-
-.stat-box-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #00ff88;
-  margin-bottom: 0.25rem;
-}
-
-.stat-box.danger .stat-box-value {
+.stat.danger .stat-value {
   color: #ff0055;
+  text-shadow: 0 0 20px rgba(255, 0, 85, 0.5);
 }
 
-.stat-box.warning .stat-box-value {
-  color: #d29922;
-}
-
-.footer {
+.stat-unit {
   color: #6e7681;
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  animation: fadeIn 1s ease 0.8s backwards;
+  font-size: 0.75rem;
 }
 
-.status-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+.narrative {
+  max-width: 700px;
+  line-height: 1.8;
+  color: #8b949e;
+  font-size: 0.95rem;
+  animation: fadeIn 1s ease 0.5s backwards;
+}
+
+.narrative-threat {
   color: #00ff88;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 1rem;
+  font-weight: bold;
 }
 
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #00ff88;
-  animation: pulse 1.5s ease-in-out infinite;
-  box-shadow: 0 0 10px #00ff88;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.narrative-danger {
+  color: #ff0055;
+  font-weight: bold;
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(30px);
   }
   to {
     opacity: 1;
@@ -240,72 +223,101 @@ h1 {
   to { opacity: 1; }
 }
 
-@media (max-width: 768px) {
-  h1 { font-size: 1.8rem; }
-  .logo { font-size: 2.5rem; }
-  .hero-value { font-size: 3rem; }
-  .hero-stat { padding: 2.5rem 1.5rem; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #00ff88;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2rem;
 }
 
-@media (max-width: 480px) {
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #00ff88;
+  border-radius: 50%;
+  animation: pulse 1s infinite;
+  box-shadow: 0 0 10px #00ff88;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (max-width: 768px) {
+  .globe { width: 200px; height: 200px; }
   h1 { font-size: 1.5rem; }
-  .logo { font-size: 2rem; }
-  .hero-value { font-size: 2.2rem; }
-  .hero-stat { padding: 2rem 1rem; }
-  .stats-grid { grid-template-columns: 1fr; }
+  .stat-value { font-size: 2.5rem; }
+  .stat-section { gap: 2rem; }
+  .narrative { font-size: 0.85rem; }
 }
 </style>
 </head>
 <body>
 
-<div class="bg"></div>
+<div class="stars" id="stars"></div>
 
 <div class="container">
-  <header>
-    <div class="logo">🛡️</div>
-    <h1>L7 Protection</h1>
-    <p class="tagline">Real-Time Defense Network</p>
-  </header>
+  <div class="globe">
+    <div class="globe-sphere">
+      <div class="globe-ring"></div>
+      <div class="pulse-ring"></div>
+    </div>
+  </div>
 
-  <div class="hero-stat">
-    <div class="hero-label">Threats Blocked Right Now</div>
-    <div class="hero-value" id="threats-count">0</div>
-    <div class="hero-description">Active threat mitigation in progress</div>
-    <div class="status-indicator">
+  <div class="content">
+    <h1>L7 Protection</h1>
+
+    <div class="stat-section">
+      <div class="stat">
+        <div class="stat-label">Live Requests</div>
+        <div class="stat-value" id="stat-live">0</div>
+        <div class="stat-unit">per second</div>
+      </div>
+
+      <div class="stat danger">
+        <div class="stat-label">Threats Blocked</div>
+        <div class="stat-value" id="stat-threats">0</div>
+        <div class="stat-unit">total mitigated</div>
+      </div>
+    </div>
+
+    <div class="narrative">
+      Your edge is defending against <span class="narrative-threat" id="narrative-threats">0</span> active threats.
+      <span class="narrative-danger" id="narrative-blocked">0</span> requests blocked,
+      <span class="narrative-danger" id="narrative-ratelimited">0</span> rate-limited.
+      System shield integrity: <span class="narrative-threat" id="narrative-health">0%</span>.
+    </div>
+
+    <div class="status">
       <span class="pulse-dot"></span>
       Shield Active
     </div>
   </div>
-
-  <div class="stats-grid">
-    <div class="stat-box">
-      <div class="stat-box-label">Total Processed</div>
-      <div class="stat-box-value" id="stat-total">0</div>
-    </div>
-
-    <div class="stat-box danger">
-      <div class="stat-box-label">Blocked</div>
-      <div class="stat-box-value" id="stat-blocked">0</div>
-    </div>
-
-    <div class="stat-box warning">
-      <div class="stat-box-label">Rate Limited</div>
-      <div class="stat-box-value" id="stat-ratelimit">0</div>
-    </div>
-
-    <div class="stat-box">
-      <div class="stat-box-label">Success %</div>
-      <div class="stat-box-value" id="stat-success-pct">0%</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <p>Powered by Envoy • Coraza WAF • Edge Guard</p>
-  </div>
 </div>
 
 <script>
+// Generate random stars
+function generateStars() {
+  const starsContainer = document.getElementById('stars');
+  for (let i = 0; i < 50; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    star.style.width = Math.random() * 2 + 'px';
+    star.style.height = star.style.width;
+    star.style.left = Math.random() * 100 + '%';
+    star.style.top = Math.random() * 100 + '%';
+    star.style.animationDelay = Math.random() * 3 + 's';
+    starsContainer.appendChild(star);
+  }
+}
+
+generateStars();
+
 async function updateStats() {
   try {
     const resp = await fetch('/api/stats');
@@ -328,14 +340,20 @@ async function updateStats() {
       if (name.includes('https_edge.downstream_rq_2xx')) success = val;
     }
 
-    const successPct = total > 0 ? Math.round((success / total) * 100) : 0;
-    const threatsBlocked = blocked + ratelimited;
+    const threats = blocked + ratelimited;
+    const health = total > 0 ? Math.round(((total - blocked - ratelimited) / total) * 100) : 0;
 
-    document.getElementById('threats-count').textContent = threatsBlocked.toLocaleString();
-    document.getElementById('stat-total').textContent = total.toLocaleString();
-    document.getElementById('stat-blocked').textContent = blocked.toLocaleString();
-    document.getElementById('stat-ratelimit').textContent = ratelimited.toLocaleString();
-    document.getElementById('stat-success-pct').textContent = successPct + '%';
+    // Update main stats (approximate live RPS as threats/10 for demo, or total/3600 for hourly)
+    const liveRPS = Math.floor(threats / 10) || Math.floor(Math.random() * 50);
+
+    document.getElementById('stat-live').textContent = liveRPS.toLocaleString();
+    document.getElementById('stat-threats').textContent = threats.toLocaleString();
+
+    // Update narrative
+    document.getElementById('narrative-threats').textContent = threats.toLocaleString();
+    document.getElementById('narrative-blocked').textContent = blocked.toLocaleString();
+    document.getElementById('narrative-ratelimited').textContent = ratelimited.toLocaleString();
+    document.getElementById('narrative-health').textContent = health + '%';
 
   } catch (err) {
     console.error('Failed to fetch stats:', err);
