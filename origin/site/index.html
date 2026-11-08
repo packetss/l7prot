@@ -288,7 +288,7 @@ h1 {
 
     <div class="narrative">
       Total requests blocked: <span class="narrative-danger" id="narrative-blocked">0</span>.
-      System shield integrity: <span class="narrative-threat" id="narrative-health">0%</span>.
+      Threats blocked: <span class="narrative-threat" id="narrative-health">0%</span>.
     </div>
 
     <div class="status">
@@ -329,7 +329,7 @@ async function updateStats() {
     const success = stats.success_2xx || 0;
 
     const threats = blocked + ratelimited;
-    const health = total > 0 ? Math.round(((total - blocked - ratelimited) / total) * 100) : 0;
+    const health = total > 0 ? Math.round(((blocked + ratelimited) / total) * 100) : 0;
 
     // Track delta since last poll for live request count
     if (!window.prevTotal) window.prevTotal = total;
