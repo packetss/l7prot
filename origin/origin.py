@@ -20,6 +20,7 @@ import json
 import os
 import socket
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "127.0.0.1"          # deliberately loopback-only
@@ -64,6 +65,16 @@ class Handler(BaseHTTPRequestHandler):
                 "ts": time.time(),
             }
             self._send(200, json.dumps(payload, indent=2), "application/json")
+            return
+
+        if path == "/api/stats":
+            try:
+                req = urllib.request.Request("http://127.0.0.1:9901/stats?format=json")
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    stats_data = json.loads(resp.read().decode())
+                self._send(200, json.dumps(stats_data), "application/json")
+            except Exception as e:
+                self._send(503, json.dumps({"error": str(e)}), "application/json")
             return
 
         if path == "/":

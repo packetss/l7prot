@@ -415,14 +415,12 @@ h1 {
 <script>
 async function updateStats() {
   try {
-    // Fetch stats from the Envoy admin API directly (no auth needed)
-    const resp = await fetch('http://127.0.0.1:9901/stats?format=json');
-    if (!resp.ok) throw new Error('Admin API error');
+    const resp = await fetch('/api/stats');
+    if (!resp.ok) throw new Error('Stats API error');
 
     const data = await resp.json();
     const stats = data.stats || [];
 
-    // Parse Envoy stats
     let total = 0, blocked = 0, ratelimited = 0, success = 0;
 
     for (const stat of stats) {
@@ -451,7 +449,6 @@ async function updateStats() {
 
 async function updateThreats() {
   try {
-    // Try dashboard API first
     const resp = await fetch('/dashboard/api/stats', { credentials: 'include' });
     if (!resp.ok) throw new Error('Dashboard API error');
 
@@ -472,7 +469,6 @@ async function updateThreats() {
 
   } catch (err) {
     console.error('Failed to fetch threats:', err);
-    document.getElementById('top-ips-list').innerHTML = '<div class="loading">Threat data unavailable</div>';
   }
 }
 
@@ -482,11 +478,9 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Update stats every 2 seconds
 setInterval(updateStats, 2000);
 updateStats();
 
-// Update threats every 3 seconds
 setInterval(updateThreats, 3000);
 updateThreats();
 </script>
