@@ -332,7 +332,7 @@ async function updateStats() {
 
     const threats = blocked + ratelimited;
     const health = total > 0 ? Math.round(((total - blocked - ratelimited) / total) * 100) : 0;
-    const liveRPS = Math.max(1, Math.floor(threats / 20));
+    const liveRPS = Math.max(1, Math.floor(total / 20));
 
     document.getElementById('stat-live').textContent = liveRPS.toLocaleString();
     document.getElementById('stat-threats').textContent = threats.toLocaleString();
