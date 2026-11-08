@@ -263,17 +263,9 @@ def create_app():
 
     # Start log tailer in background (non-blocking)
     async def start_background_tasks(app):
-        app['log_tailer'] = asyncio.create_task(tail_envoy_logs())
-
-    async def cleanup_background_tasks(app):
-        app['log_tailer'].cancel()
-        try:
-            await app['log_tailer']
-        except asyncio.CancelledError:
-            pass
+        asyncio.create_task(tail_envoy_logs())
 
     app.on_startup.append(start_background_tasks)
-    app.on_cleanup.append(cleanup_background_tasks)
 
     return app
 
