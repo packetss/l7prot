@@ -26,6 +26,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOST = "127.0.0.1"          # deliberately loopback-only
 PORT = int(os.environ.get("ORIGIN_PORT", "8080"))
 SITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site")
+# Certbot webroot for ACME renewals — lets us renew without stopping Envoy.
+ACME_ROOT = os.environ.get("ACME_ROOT", "/var/lib/l7ddos/acme")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -54,6 +56,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/healthz":
             self._send(200, "ok\n", "text/plain")
+            return
+
+        # ACME HTTP-01 challenge — served straight from the certbot webroot
+        # so renewals work without stopping Envoy (which would drop traffic).
+        if path.startswith("/.well-known/acme-challenge/"):
+            rel = path[len("/.well-known/acme-challenge/"):]
+            # Block traversal: only allow a plain filename.
+            if not rel or "/" in rel or ".." in rel:
+                self._send(400, "bad challenge path\n", "text/plain")
+                return
+            try:
+                with open(os.path.join(ACME_ROOT, rel), "rb") as fh:
+                    self._send(200, fh.read(), "text/plain")
+            except OSError:
+                self._send(404, "challenge not found\n", "text/plain")
             return
 
         if path == "/api/echo":

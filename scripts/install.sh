@@ -63,7 +63,7 @@ fi
 
 # ---------------------------------------------------------------------------
 log "Installing config"
-mkdir -p /etc/envoy/lua /var/log/envoy /var/lib/l7ddos
+mkdir -p /etc/envoy/lua /var/log/envoy /var/lib/l7ddos /var/lib/l7ddos/acme
 cp "$SRC_DIR/envoy/envoy.yaml"          /etc/envoy/envoy.yaml
 cp "$SRC_DIR/envoy/lua/edge_guard.lua"  /etc/envoy/lua/edge_guard.lua
 
@@ -87,6 +87,7 @@ Type=simple
 User=$USER_NAME
 WorkingDirectory=/var/lib/l7ddos
 Environment=ORIGIN_PORT=8080
+Environment=ACME_ROOT=/var/lib/l7ddos/acme
 ExecStart=/usr/bin/python3 /var/lib/l7ddos/origin.py
 Restart=always
 RestartSec=2

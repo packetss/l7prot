@@ -67,7 +67,7 @@ fi
 # ===========================================================================
 log "Step 3/8: Installing configs and origin app"
 
-mkdir -p /etc/envoy/lua /etc/envoy/coraza /var/log/envoy /var/lib/l7ddos
+mkdir -p /etc/envoy/lua /etc/envoy/coraza /var/log/envoy /var/lib/l7ddos /var/lib/l7ddos/acme
 cp "$SRC_DIR/envoy/envoy.yaml"          /etc/envoy/envoy.yaml
 cp "$SRC_DIR/envoy/lua/edge_guard.lua"  /etc/envoy/lua/edge_guard.lua
 cp "$SRC_DIR/envoy/coraza/rules.conf"   /etc/envoy/coraza/rules.conf
@@ -93,6 +93,7 @@ Type=simple
 User=l7edge
 WorkingDirectory=/var/lib/l7ddos
 Environment=ORIGIN_PORT=8080
+Environment=ACME_ROOT=/var/lib/l7ddos/acme
 ExecStart=/usr/bin/python3 /var/lib/l7ddos/origin.py
 Restart=always
 RestartSec=2
@@ -164,50 +165,57 @@ ENVOY_YAML="/etc/envoy/envoy.yaml"
 CERT="/etc/letsencrypt/live/${DOMAIN}"
 
 python3 - "$ENVOY_YAML" "$DOMAIN" <<'PYEOF'
-import sys, pathlib
+import sys, pathlib, re
 
 path, domain = sys.argv[1], sys.argv[2]
 text = pathlib.Path(path).read_text()
+cert = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+key = f"/etc/letsencrypt/live/{domain}/privkey.pem"
 
-if "transport_socket:" in text:
-    print("  transport_socket already present, skipping patch")
-    sys.exit(0)
+if "transport_socket:" not in text:
+    tls_block = (
+        "      - transport_socket:\n"
+        "          name: envoy.transport_sockets.tls\n"
+        "          typed_config:\n"
+        '            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext\n'
+        "            common_tls_context:\n"
+        "              tls_params:\n"
+        "                tls_minimum_protocol_version: TLSv1_2\n"
+        "              tls_certificates:\n"
+        f"                - certificate_chain: {{ filename: {cert} }}\n"
+        f"                  private_key: {{ filename: {key} }}\n"
+        '              alpn_protocols: ["h2", "http/1.1"]\n'
+        "        filters:\n"
+    )
+    marker = "    filter_chains:\n"
+    idx = text.find(marker)
+    if idx == -1:
+        print("  !! could not find filter_chains - edit envoy.yaml manually")
+        sys.exit(1)
+    idx2 = text.find(marker, idx + 1)
+    if idx2 == -1:
+        print("  !! second filter_chains not found - edit envoy.yaml manually")
+        sys.exit(1)
+    old_start = "      - filters:\n"
+    old_pos = text.find(old_start, idx2)
+    if old_pos == -1:
+        print("  !! could not find '- filters:' after https filter_chains")
+        sys.exit(1)
+    text = text[:old_pos] + tls_block + text[old_pos + len(old_start):]
+    print(f"  inserted TLS block for {domain}")
+else:
+    # TLS block already present (shipped config has placeholder paths) —
+    # repoint the cert paths at this domain.
+    text, n1 = re.subn(r'certificate_chain: \{ filename: [^}]+\}',
+                       f'certificate_chain: {{ filename: {cert} }}', text)
+    text, n2 = re.subn(r'private_key: \{ filename: [^}]+\}',
+                       f'private_key: {{ filename: {key} }}', text)
+    if n1 == 0 or n2 == 0:
+        print("  !! TLS block found but cert paths were not replaced - edit manually")
+        sys.exit(1)
+    print(f"  repointed cert paths to {domain}")
 
-tls_block = (
-    "      - transport_socket:\n"
-    "          name: envoy.transport_sockets.tls\n"
-    "          typed_config:\n"
-    '            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext\n'
-    "            common_tls_context:\n"
-    "              tls_params:\n"
-    "                tls_minimum_protocol_version: TLSv1_2\n"
-    "              tls_certificates:\n"
-    f"                - certificate_chain: {{ filename: /etc/letsencrypt/live/{domain}/fullchain.pem }}\n"
-    f"                  private_key: {{ filename: /etc/letsencrypt/live/{domain}/privkey.pem }}\n"
-    '              alpn_protocols: ["h2", "http/1.1"]\n'
-    "        filters:\n"
-)
-
-marker = "    filter_chains:\n"
-idx = text.find(marker)
-if idx == -1:
-    print("  !! could not find filter_chains - edit envoy.yaml manually")
-    sys.exit(1)
-
-idx2 = text.find(marker, idx + 1)
-if idx2 == -1:
-    print("  !! second filter_chains not found - edit envoy.yaml manually")
-    sys.exit(1)
-
-old_start = "      - filters:\n"
-old_pos = text.find(old_start, idx2)
-if old_pos == -1:
-    print("  !! could not find '- filters:' after https filter_chains")
-    sys.exit(1)
-
-text = text[:old_pos] + tls_block + text[old_pos + len(old_start):]
 pathlib.Path(path).write_text(text)
-print("  patched envoy.yaml with TLS context")
 PYEOF
 
 ok "Certificate patched into envoy.yaml"
@@ -229,6 +237,20 @@ systemctl reload l7ddos-envoy 2>/dev/null || systemctl restart l7ddos-envoy
 EOF
 chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-envoy.sh
 systemctl enable --now certbot.timer 2>/dev/null || true
+
+# Switch renewals to webroot so they never need to stop Envoy (no downtime).
+ACME_ROOT="/var/lib/l7ddos/acme"
+mkdir -p "$ACME_ROOT"
+RENEWAL_CONF="/etc/letsencrypt/renewal/${DOMAIN}.conf"
+if [ -f "$RENEWAL_CONF" ]; then
+  sed -i 's/^authenticator = standalone$/authenticator = webroot/' "$RENEWAL_CONF"
+  if grep -q "^webroot_path" "$RENEWAL_CONF"; then
+    sed -i "s|^webroot_path = .*|webroot_path = ${ACME_ROOT}|" "$RENEWAL_CONF"
+  else
+    printf 'webroot_path = %s\n' "$ACME_ROOT" >> "$RENEWAL_CONF"
+  fi
+  ok "Renewals use webroot (no downtime)"
+fi
 
 systemctl start l7ddos-envoy
 sleep 2

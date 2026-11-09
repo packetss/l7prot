@@ -48,6 +48,8 @@ origin/
 scripts/
   install.sh            one-shot VPS setup
   update.sh             pull new code onto a running server and redeploy it
+  migrate.sh            move the site to a new server (runs on the NEW box)
+  shutdown-server.sh    take a server out of service (runs on the OLD box)
   tune.sh               change thresholds (edits Lua + restarts Envoy)
   test.sh               verifies each layer actually fires
 dashboard/
@@ -117,6 +119,43 @@ This pulls the latest code, copies the origin app, dashboard and Envoy
 config into place (preserving your certificate paths), validates the Envoy
 config before restarting, and reports the status of every service. It's
 idempotent and safe to run on a live server.
+
+### Moving to a different server
+
+To move the site to a new VPS:
+
+**On the new server:**
+
+```bash
+git clone https://github.com/packetss/l7prot.git && cd l7prot
+sudo ./scripts/migrate.sh your.domain.com [email@optional.com]
+```
+
+This cleans out any previous install, deploys the full stack, gets the TLS
+certificate, and runs post-deploy checks. The new server starts serving
+`your.domain.com` immediately — the cert is issued for the domain, not
+the IP, so it's valid the moment DNS points there.
+
+**Then switch DNS** — lower the TTL to 300 first, wait for it to
+propagate, then point the A record at the new server's IP.
+
+**If you use Magic Transit**, you must also:
+- Add the new server's IP under *Magic Transit → Static IPs*
+- Update your announced /24 to include the new IP
+
+Skip this and your /24 still points at the old server, so volumetric
+traffic never reaches the new edge.
+
+**Then retire the old server:**
+
+```bash
+sudo ./scripts/shutdown-server.sh
+```
+
+That stops and disables the services and closes ports 80/443 in the
+firewall, but leaves the files in place — so bringing it back is just
+`systemctl start l7ddos-envoy l7ddos-origin l7dashboard`. Add `--purge`
+to remove the configs and dashboard data too.
 
 ### Surviving a reboot
 
