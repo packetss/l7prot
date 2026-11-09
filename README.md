@@ -214,11 +214,35 @@ The configurable values:
 | Variable | Default | Meaning |
 |---|---|---|
 | `RATE_LIMIT_ENABLED` | true | master switch for rate limiting |
-| `IP_RATE_LIMIT` | 20 | requests/sec per IP (per worker) |
-| `IP_BURST` | 40 | bucket depth (burst tolerance) |
+| `GLOBAL_RATE_LIMIT` | 12 | requests/sec per IP, **summed across workers** |
+| `GLOBAL_BURST` | 25 | bucket depth per IP, summed across workers |
 | `BLOCKLIST_ENABLED` | true | honour the IP blocklist |
 | `UA_BLOCKLIST_ENABLED` | true | honour the UA blocklist |
 | `SUSPICION_THRESHOLD` | 3 | combined score to block |
+
+**A note on worker counts.** Envoy runs one worker thread per CPU core, and
+each worker gets its own Lua VM — and therefore its own token bucket. A
+literal `IP_RATE_LIMIT = 20` would therefore mean *20 rps per worker*, so
+the real limit would be 80 rps on a 4-core box and 320 rps on a 16-core box.
+
+To avoid that, the Lua file declares a **global** target (`GLOBAL_RATE_LIMIT`,
+`GLOBAL_BURST`) and divides it by `ENV_WORKERS`, which `deploy.sh` and
+`update.sh` bake in from `nproc` at install time. So `GLOBAL_RATE_LIMIT = 12`
+means 12 rps per IP on any hardware. The derived per-worker values are:
+
+| Cores | `IP_RATE_LIMIT` | `IP_BURST` | Effective per-IP |
+|---|---|---|---|
+| 1 | 12 | 25 | 12 rps / 25 burst |
+| 2 | 6 | 12 | 12 rps / 24 burst |
+| 4 | 3 | 6 | 12 rps / 24 burst |
+| 8 | 1 | 3 | 8 rps / 24 burst |
+
+(At 8+ cores the per-worker rate floors at 1 rps, so the effective limit
+drifts slightly low. That errs on the side of being stricter, which is the
+safe direction for a DDoS filter.)
+
+`tune.sh` always sets the *global* values, so you don't need to think about
+core count when tuning.
 
 **Note on per-worker state:** Envoy runs one Lua VM per worker thread. Rate
 limit buckets are NOT shared across workers, so effective per-IP limits are

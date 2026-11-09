@@ -14,11 +14,36 @@
 -- V2 CHANGES: Auto-ban IPs after repeated rate limit violations
 
 local RATE_LIMIT_ENABLED   = true
-local IP_RATE_LIMIT        = 20
-local IP_BURST             = 40
 local UA_BLOCKLIST_ENABLED = true
 local BLOCKLIST_ENABLED    = true
 local SUSPICION_THRESHOLD  = 3
+
+-- Per-IP rate limit.
+--
+-- IMPORTANT: the token bucket lives in ONE Lua VM per Envoy worker thread,
+-- so a naive "IP_RATE_LIMIT = 20" means 20 rps PER WORKER — on a 4-core box
+-- that is really 80 rps for a single attacker. To make the limit mean the
+-- same thing regardless of core count, we set a GLOBAL target here and
+-- divide it by the worker count, which deploy.sh bakes in as ENV_WORKERS.
+--
+--   effective per-IP rate = GLOBAL_RATE_LIMIT rps
+--   effective per-IP burst = GLOBAL_BURST requests
+local ENV_WORKERS       = 1    -- patched by deploy.sh (nproc)
+local GLOBAL_RATE_LIMIT = 12   -- requests/sec per IP, summed across workers
+local GLOBAL_BURST      = 25   -- burst per IP, summed across workers
+
+local IP_RATE_LIMIT = math.max(1, math.floor(GLOBAL_RATE_LIMIT / ENV_WORKERS))
+local IP_BURST      = math.max(2, math.floor(GLOBAL_BURST      / ENV_WORKERS))
+
+-- Exported for the unit test so it can assert the worker scaling.
+-- Envoy ignores extra globals in the Lua filter sandbox.
+local _edge_guard_config = {
+  env_workers    = ENV_WORKERS,
+  global_rate    = GLOBAL_RATE_LIMIT,
+  global_burst   = GLOBAL_BURST,
+  ip_rate_limit  = IP_RATE_LIMIT,
+  ip_burst       = IP_BURST,
+}
 
 -- V2: Auto-ban configuration with escalating penalties
 local AUTO_BAN_ENABLED        = true

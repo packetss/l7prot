@@ -35,10 +35,30 @@ if [ "$c" = "closed" ]; then ok "origin port 8080 is closed to the world"; else 
 
 # ---------------------------------------------------------------------------
 hdr "3. Rate limiting (per IP)"
-# Fire a burst and count 429s. We do this quietly so we don't hammer the origin.
-counts=$(for i in $(seq 1 120); do
-           curl -s -o /dev/null -w "%{http_code}\n" "$BASE/api/echo"
-         done | sort | uniq -c | tr -s ' ')
+# Fire a burst CONCURRENTLY and count 429s. Sequential curls are too slow:
+# each one pays a full TLS handshake, so a sequential loop never outruns the
+# token bucket's refill rate and never trips the limit.
+#
+# The Lua token bucket is per-worker (one Lua VM per Envoy worker thread),
+# so the effective burst is IP_BURST x worker_count. Size the burst from the
+# actual worker count and add a healthy margin, otherwise a multi-core box
+# absorbs the whole burst and we see no 429s.
+# Envoy defaults to one worker per CPU core when concurrency isn't set.
+WORKERS=$(nproc 2>/dev/null || echo 1)
+case "$WORKERS" in ''|*[!0-9]*) WORKERS=1 ;; esac
+[ "$WORKERS" -lt 1 ] && WORKERS=1
+BURST_N=$(( (40 * WORKERS) * 3 ))
+[ "$BURST_N" -gt 400 ] && BURST_N=400
+
+burst_dir=$(mktemp -d)
+for i in $(seq 1 "$BURST_N"); do
+  ( curl -s -o /dev/null -w "%{http_code}\n" --max-time 10 \
+      "$BASE/api/echo" > "$burst_dir/$i" 2>/dev/null ) &
+done
+wait
+counts=$(cat "$burst_dir"/* 2>/dev/null | sort | uniq -c | tr -s ' ')
+rm -rf "$burst_dir"
+echo "     burst of ${BURST_N} concurrent requests (${WORKERS} envoy worker(s))"
 echo "     status counts: ${counts}"
 if echo "$counts" | grep -q "429"; then ok "rate limiting fires (429 seen)"; else bad "no 429s — rate limit not working"; fi
 

@@ -24,6 +24,24 @@ warn() { echo -e "\033[1;33m!!\033[0m $*"; }
 die()  { echo -e "\033[1;31mxx\033[0m $*" >&2; exit 1; }
 ok()   { echo -e "  \033[1;32m✓\033[0m $*"; }
 
+
+# Bake the actual worker count into the Lua filter.
+#
+# Envoy runs one worker thread per CPU core by default, and the Lua token
+# bucket lives in a separate VM per worker. Without this, the "per IP" rate
+# limit silently multiplies by the core count (20 rps/worker = 80 rps on a
+# 4-core box). The Lua file divides its global target by ENV_WORKERS so the
+# limit means the same thing everywhere.
+patch_envoy_workers() {
+  local lua_file="$1"
+  local workers
+  workers=$(nproc 2>/dev/null || echo 1)
+  case "$workers" in ''|*[!0-9]*) workers=1 ;; esac
+  [ "$workers" -lt 1 ] && workers=1
+  sed -i "s/^local ENV_WORKERS .*/local ENV_WORKERS       = ${workers}   -- patched by deploy.sh (nproc)/" "$lua_file"
+  echo "  envoy workers: ${workers} (per-IP rate limit scaled accordingly)"
+}
+
 # Verify root
 [ "$EUID" -eq 0 ] || die "This script must be run as root (use sudo)"
 
@@ -70,6 +88,7 @@ log "Step 3/8: Installing configs and origin app"
 mkdir -p /etc/envoy/lua /etc/envoy/coraza /var/log/envoy /var/lib/l7ddos /var/lib/l7ddos/acme
 cp "$SRC_DIR/envoy/envoy.yaml"          /etc/envoy/envoy.yaml
 cp "$SRC_DIR/envoy/lua/edge_guard.lua"  /etc/envoy/lua/edge_guard.lua
+patch_envoy_workers /etc/envoy/lua/edge_guard.lua
 cp "$SRC_DIR/envoy/coraza/rules.conf"   /etc/envoy/coraza/rules.conf
 cp "$SRC_DIR/envoy/coraza/directives.conf" /etc/envoy/coraza/directives.conf
 ok "Envoy config installed"
@@ -321,9 +340,16 @@ c=$(timeout 5 bash -c "echo > /dev/tcp/${DOMAIN}/8080" 2>/dev/null && echo "open
 if [ "$c" = "closed" ]; then ok_test "origin port 8080 is closed"; else fail_test "ORIGIN IS PUBLIC!"; fi
 
 test_hdr "3. Rate limiting works"
-counts=$(for i in $(seq 1 50); do
-         curl -s -o /dev/null -w "%{http_code}\n" "$BASE/api/echo"
-       done | sort | uniq -c | tr -s ' ')
+# Fire concurrently — a sequential loop is too slow to outrun the token
+# bucket's refill rate, so it never trips the limit.
+burst_dir=$(mktemp -d)
+for i in $(seq 1 120); do
+  ( curl -s -o /dev/null -w "%{http_code}\n" --max-time 10 \
+      "$BASE/api/echo" > "$burst_dir/$i" 2>/dev/null ) &
+done
+wait
+counts=$(cat "$burst_dir"/* 2>/dev/null | sort | uniq -c | tr -s ' ')
+rm -rf "$burst_dir"
 if echo "$counts" | grep -q "429"; then ok_test "rate limiting active"; else fail_test "no 429s seen"; fi
 
 test_hdr "4. Scanner User-Agents blocked"
@@ -385,8 +411,8 @@ echo "  journalctl -u l7ddos-envoy -f"
 echo
 echo "Tune thresholds:"
 echo "  # Rate limit: 100 req/s, burst 200"
-echo "  sed -i 's/local IP_RATE_LIMIT = .*/local IP_RATE_LIMIT = 100/' /etc/envoy/lua/edge_guard.lua"
-echo "  sed -i 's/local IP_BURST = .*/local IP_BURST = 200/' /etc/envoy/lua/edge_guard.lua"
+echo "  sed -i 's/local GLOBAL_RATE_LIMIT = .*/local GLOBAL_RATE_LIMIT = 30/' /etc/envoy/lua/edge_guard.lua"
+echo "  sed -i 's/local GLOBAL_BURST = .*/local GLOBAL_BURST = 60/' /etc/envoy/lua/edge_guard.lua"
 echo "  systemctl restart l7ddos-envoy"
 echo
 echo "Useful files:"

@@ -17,6 +17,24 @@ warn() { echo -e "\033[1;33m!!\033[0m $*"; }
 die()  { echo -e "\033[1;31mxx\033[0m $*" >&2; exit 1; }
 ok()   { echo -e "  \033[1;32m✓\033[0m $*"; }
 
+
+# Bake the actual worker count into the Lua filter.
+#
+# Envoy runs one worker thread per CPU core by default, and the Lua token
+# bucket lives in a separate VM per worker. Without this, the "per IP" rate
+# limit silently multiplies by the core count (20 rps/worker = 80 rps on a
+# 4-core box). The Lua file divides its global target by ENV_WORKERS so the
+# limit means the same thing everywhere.
+patch_envoy_workers() {
+  local lua_file="$1"
+  local workers
+  workers=$(nproc 2>/dev/null || echo 1)
+  case "$workers" in ''|*[!0-9]*) workers=1 ;; esac
+  [ "$workers" -lt 1 ] && workers=1
+  sed -i "s/^local ENV_WORKERS .*/local ENV_WORKERS       = ${workers}   -- patched by deploy.sh (nproc)/" "$lua_file"
+  echo "  envoy workers: ${workers} (per-IP rate limit scaled accordingly)"
+}
+
 [ "$EUID" -eq 0 ] || die "must run as root (use sudo)"
 
 # ---------------------------------------------------------------------------
@@ -67,6 +85,7 @@ PYEOF
   fi
 
   cp "$SRC_DIR/envoy/lua/edge_guard.lua" /etc/envoy/lua/edge_guard.lua
+  patch_envoy_workers /etc/envoy/lua/edge_guard.lua
 
   if /usr/local/bin/envoy --mode validate -c /etc/envoy/envoy.yaml 2>/tmp/envoy_validate.log; then
     systemctl restart l7ddos-envoy.service

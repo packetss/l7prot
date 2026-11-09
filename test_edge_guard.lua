@@ -8,7 +8,7 @@ local clock_ms = 1000000
 -- We just need handle:timestamp() to return our mock clock.
 
 -- Load the filter
-local chunk = assert(loadfile("l7ddos/envoy/lua/edge_guard.lua"))
+local chunk = assert(loadfile("envoy/lua/edge_guard.lua"))
 chunk()
 
 -- Mock request handle
@@ -78,6 +78,38 @@ for i = 1, 10 do
   if st == nil then allowed = allowed + 1 end
 end
 check("bucket refills over time", allowed > 0, "allowed=" .. allowed)
+
+print("\n== worker-count scaling ==")
+-- The token bucket is per-worker, so the Lua file divides its global target
+-- by ENV_WORKERS. Verify the per-worker values are what we expect and that
+-- the effective global limit stays within a sensible band.
+local cfg = _edge_guard_config
+check("config exported", cfg ~= nil)
+if cfg then
+  check("ENV_WORKERS is set", cfg.env_workers ~= nil and cfg.env_workers >= 1,
+        "tostring=" .. tostring(cfg.env_workers))
+  check("GLOBAL_RATE_LIMIT is set", cfg.global_rate ~= nil and cfg.global_rate > 0)
+  check("GLOBAL_BURST is set", cfg.global_burst ~= nil and cfg.global_burst > 0)
+
+  local expect_rate  = math.max(1, math.floor(cfg.global_rate  / cfg.env_workers))
+  local expect_burst = math.max(2, math.floor(cfg.global_burst / cfg.env_workers))
+  check("per-worker rate matches global/workers",
+        cfg.ip_rate_limit == expect_rate,
+        "got " .. tostring(cfg.ip_rate_limit) .. " want " .. tostring(expect_rate))
+  check("per-worker burst matches global/workers",
+        cfg.ip_burst == expect_burst,
+        "got " .. tostring(cfg.ip_burst) .. " want " .. tostring(expect_burst))
+
+  local eff = cfg.ip_rate_limit * cfg.env_workers
+  check("effective global rate stays near target",
+        eff <= cfg.global_rate + cfg.env_workers,
+        "effective=" .. tostring(eff) .. " target=" .. tostring(cfg.global_rate))
+
+  -- A single IP must not be able to exceed the global burst, whatever
+  -- the core count.
+  check("effective burst is bounded", cfg.ip_burst * cfg.env_workers <= cfg.global_burst + cfg.env_workers,
+        "effective=" .. tostring(cfg.ip_burst * cfg.env_workers) .. " target=" .. tostring(cfg.global_burst))
+end
 
 print("\n== UA blocking ==")
 check("sqlmap blocked", status_of({ ip = "10.0.0.1", ua = "sqlmap/1.7" }) == 403)

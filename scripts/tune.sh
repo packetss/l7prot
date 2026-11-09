@@ -11,6 +11,10 @@
 #    ./tune.sh enable | disable         # toggle rate limiting
 #    ./tune.sh show                     # show current values
 #    ./tune.sh reset                    # restore defaults
+#
+#  NOTE: rate_limit takes the GLOBAL per-IP target. Envoy runs one Lua VM
+#  per worker thread, so the Lua file divides this by the worker count to
+#  keep the limit identical no matter how many cores the box has.
 # ===========================================================================
 set -euo pipefail
 
@@ -41,8 +45,12 @@ reload_envoy() {
 
 show() {
   cyan "current edge_guard.lua settings:"
-  grep -E '^local (RATE_LIMIT_ENABLED|IP_RATE_LIMIT|IP_BURST|UA_BLOCKLIST_ENABLED|BLOCKLIST_ENABLED|SUSPICION_THRESHOLD) ' "$LUA" \
+  grep -E '^local (RATE_LIMIT_ENABLED|GLOBAL_RATE_LIMIT|GLOBAL_BURST|ENV_WORKERS|UA_BLOCKLIST_ENABLED|BLOCKLIST_ENABLED|SUSPICION_THRESHOLD) ' "$LUA" \
     | sed 's/^local /  /' || echo "  (could not read values)"
+  local workers; workers=$(grep -E '^local ENV_WORKERS ' "$LUA" | grep -o '[0-9]*$' || echo 1)
+  local rate;   rate=$(grep -E '^local GLOBAL_RATE_LIMIT ' "$LUA" | grep -o '[0-9]*' | tail -1 || echo 12)
+  local burst;  burst=$(grep -E '^local GLOBAL_BURST ' "$LUA" | grep -o '[0-9]*' | tail -1 || echo 25)
+  echo "  effective per-IP limit: ${rate} req/s, burst ${burst} (across ${workers} worker(s))"
 }
 
 case "${1:-show}" in
@@ -50,8 +58,8 @@ case "${1:-show}" in
     RATE="${2:?usage: tune.sh rate_limit <req_per_sec> [burst]}"
     BURST="${3:-}"
     cyan "setting per-IP rate limit"
-    set_lua_var IP_RATE_LIMIT "$RATE"
-    [ -n "$BURST" ] && set_lua_var IP_BURST "$BURST"
+    set_lua_var GLOBAL_RATE_LIMIT "$RATE"
+    [ -n "$BURST" ] && set_lua_var GLOBAL_BURST "$BURST"
     reload_envoy
     ;;
   enable)
@@ -68,8 +76,8 @@ case "${1:-show}" in
   reset)
     cyan "resetting to defaults"
     set_lua_var RATE_LIMIT_ENABLED "true"
-    set_lua_var IP_RATE_LIMIT "20"
-    set_lua_var IP_BURST "40"
+    set_lua_var GLOBAL_RATE_LIMIT "12"
+    set_lua_var GLOBAL_BURST "25"
     set_lua_var UA_BLOCKLIST_ENABLED "true"
     set_lua_var BLOCKLIST_ENABLED "true"
     set_lua_var SUSPICION_THRESHOLD "3"
