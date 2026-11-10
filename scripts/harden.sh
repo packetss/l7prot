@@ -255,11 +255,6 @@ table inet ${NFT_TABLE} {
         # limit here must never lock us out of the box.
 ${unlimited}
         # --- connection shedding -------------------------------------------
-        # Per-source concurrent connection cap. A browser uses 1-6; a bot
-        # opening hundreds gets cut off. Checked before rate limiting so
-        # connection-flood bots never consume rate-limit state.
-        tcp dport 443 ct state new meter connlimit_per_ip { ip saddr ct count over ${CONNLIMIT_ABOVE} } drop
-
         # Per-source NEW connection rate. Over the limit -> drop.
         tcp dport 443 ct state new update @per_ip_conn { ip saddr limit rate over ${PER_IP_CONN_RATE}/second burst ${PER_IP_CONN_BURST} packets } drop
 
@@ -290,6 +285,8 @@ apply_nft() {
 
   # Replace only our own table. Never "flush ruleset".
   nft delete table inet "$NFT_TABLE" 2>/dev/null || true
+  # Also flush any stale anonymous meters that survive a table delete.
+  nft flush chain inet "$NFT_TABLE" input 2>/dev/null || true
   if ! nft -f "$NFT_CONF" 2>/tmp/nft_apply.log; then
     red "failed to apply nftables rules:"
     cat /tmp/nft_apply.log >&2
