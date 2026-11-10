@@ -25,6 +25,40 @@ admin:
       typed_config:
         "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
 
+# Bound the total number of concurrent downstream connections across all
+# listeners. Without this Envoy logs:
+#
+#   There is no configured limit to the number of allowed active downstream
+#   connections. Configure a limit in
+#   'envoy.resource_monitors.global_downstream_max_connections' resource monitor.
+#
+# and under a connection flood it will happily allocate until the kernel
+# OOM killer takes the process down (observed: status=9/KILL).
+#
+# SIZING (2GB / 2 core box):
+#
+#   The limit must be derived from RAM, not picked for looks. Each
+#   connection costs roughly:
+#     per_connection_buffer_limit_bytes (32KB, set below)
+#     + ~30KB of Envoy per-connection state (codec, header map, filters)
+#     + TLS session/handshake state
+#     = ~62KB per connection, so 20k connections would be ~1.2GB of
+#     buffer alone -- more than this box has, which is how Envoy ended up
+#   as the OOM-killer victim in the first place.
+#
+#   6000 conns x 62KB ~= 370MB, which leaves room for Envoy's baseline
+#   footprint, the origin, the dashboard and the OS inside MemoryMax=768M.
+#
+#   This is a BACKSTOP. The primary defence is the nftables layer
+#   (scripts/harden.sh), which sheds connections before they cost anything.
+#   With that in place, bots never fill these slots and real users keep
+#   their capacity.
+resource_monitors:
+  - name: envoy.resource_monitors.global_downstream_max_connections
+    typed_config:
+      "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
+      max_active_downstream_connections: 6000
+
 static_resources:
   listeners:
 
@@ -86,6 +120,18 @@ static_resources:
               tls_certificates:
                 - certificate_chain: { filename: /etc/letsencrypt/live/filterz.xyz/fullchain.pem }
                   private_key: { filename: /etc/letsencrypt/live/filterz.xyz/privkey.pem }
+              # ALPN offers h2 and http/1.1.
+              #
+              # NOTE: h2 is KEPT deliberately, against the advice to drop it.
+              # HTTP/2 multiplexes many requests over ONE connection, so a
+              # real browser uses ~1 socket instead of ~6. Dropping h2 would
+              # push every legitimate user onto http/1.1 and MULTIPLY our
+              # connection count -- the opposite of what a 2GB box wants.
+              #
+              # The real risk of h2 is that one connection can carry
+              # thousands of concurrent streams, i.e. a request flood over a
+              # single socket. That is bounded precisely below with
+              # http2_max_concurrent_streams rather than by disabling h2.
               alpn_protocols: ["h2", "http/1.1"]
         filters:
           - name: envoy.filters.network.http_connection_manager
@@ -94,10 +140,30 @@ static_resources:
               stat_prefix: https_edge
               codec_type: AUTO
 
+              # Cap concurrent HTTP/2 streams per connection. Without this a
+              # single attacker connection can have thousands of streams in
+              # flight, which bypasses per-connection limits and burns
+              # memory on per-stream state. 100 is far above what a browser
+              # uses for a normal page load.
+              http2_protocol_options:
+                max_concurrent_streams: 100
+                max_requests_per_connection: 1000
+                initial_stream_window_size: 65535
+                initial_connection_window_size: 1048576
+
               common_http_protocol_options:
-                idle_timeout: 60s
-                max_connection_duration: 300s
+                # Shorter than the previous 300s/60s so connection slots
+                # recycle quickly during a flood. Idle connections are the
+                # cheapest thing for an attacker to hold open.
+                idle_timeout: 30s
+                max_connection_duration: 60s
                 headers_with_underscores_action: REJECT_REQUEST
+                # Cap the per-connection buffer. The default (1MB) times an
+                # unbounded connection count is what turns a connection
+                # flood into an OOM kill. 32KB is plenty for normal HTTP;
+                # larger responses are streamed in chunks rather than
+                # buffered whole.
+                per_connection_buffer_limit_bytes: 32768
 
               # No trusted proxies in front — Magic Transit is L3/L4 only
               # (transparent to HTTP). xff_num_trusted_hops MUST be 0 here:
@@ -152,13 +218,26 @@ static_resources:
                       filename: /etc/envoy/lua/edge_guard.lua
 
                 # ---- 2. per-connection backstop ------------------------------
+                # This is a GLOBAL token bucket (not per-IP), so it is a
+                # coarse overload valve rather than a per-source limit --
+                # the per-source limits live in nftables (scripts/harden.sh)
+                # and in the Lua filter.
+                #
+                # The bucket is sized so that normal browsing traffic never
+                # touches it, but a genuine request flood on a single
+                # connection exhausts it fast.
                 - name: envoy.filters.http.local_ratelimit
                   typed_config:
                     "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
                     stat_prefix: http_local_rate_limit
+                    # 503 + Retry-After rather than a TCP reset: a reset
+                    # surfaces to the user as ERR_CONNECTION_RESET and they
+                    # assume the site is down. A 503 reads as "busy, try
+                    # again" while protecting us just as well.
+                    status: { code: ServiceUnavailable }
                     token_bucket:
-                      max_tokens: 200
-                      tokens_per_fill: 200
+                      max_tokens: 2000
+                      tokens_per_fill: 2000
                       fill_interval: 1s
                     filter_enabled:
                       default_value: { numerator: 100, denominator: HUNDRED }

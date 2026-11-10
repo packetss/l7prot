@@ -35,16 +35,6 @@ local GLOBAL_BURST      = 25   -- burst per IP, summed across workers
 local IP_RATE_LIMIT = math.max(1, math.floor(GLOBAL_RATE_LIMIT / ENV_WORKERS))
 local IP_BURST      = math.max(2, math.floor(GLOBAL_BURST      / ENV_WORKERS))
 
--- Exported for the unit test so it can assert the worker scaling.
--- Envoy ignores extra globals in the Lua filter sandbox.
-local _edge_guard_config = {
-  env_workers    = ENV_WORKERS,
-  global_rate    = GLOBAL_RATE_LIMIT,
-  global_burst   = GLOBAL_BURST,
-  ip_rate_limit  = IP_RATE_LIMIT,
-  ip_burst       = IP_BURST,
-}
-
 -- V2: Auto-ban configuration with escalating penalties
 local AUTO_BAN_ENABLED        = true
 local RATE_LIMIT_STRIKES      = 5      -- ban after this many 429s
@@ -60,13 +50,40 @@ local stats       = {}
 local blocked_ips = {}
 local auto_banned = {}      -- V2: temporary bans { ip = ban_until_ms }
 local rate_strikes = {}     -- V2: track violations per IP
+local rate_strikes_ts = {}  -- V2: when the IP last violated the rate limit
 local ban_history = {}      -- V2: track how many times IP was banned
+local ban_history_ts = {}   -- V2: when IP was last banned (for LRU eviction)
 local auto_ban_count = 0    -- V2: track table size
+local strike_count = 0      -- entries across rate_strikes + ban_history
+local last_strike_gc = 0    -- when the strike-table GC last ran
 
 local COUNTER_CEILING  = 1000000
 local MAX_BUCKET_KEYS  = 50000
 local MAX_PATH_KEYS    = 500
 local BUCKET_GC_STALE  = 120000
+
+-- Cap on the per-IP auxiliary tables. A botnet rotating source IPs would
+-- otherwise grow these forever and OOM the worker (status=9/KILL in the
+-- journal). Each entry is tiny, but "forever" beats "tiny".
+local MAX_STRIKE_KEYS  = 20000
+
+-- How long a rate-limit strike record is kept after the IP's last
+-- violation. Comfortably longer than the longest ban tier (5 min) so a
+-- banned IP keeps escalating, but bounded so quiet IPs get forgotten.
+local STRIKE_TTL_MS    = 600000
+
+-- How often the strike-table GC runs. It scans the whole table, so it
+-- must be amortised rather than run per-request.
+local GC_INTERVAL_MS   = 30000
+
+-- FIFO of IP keys in insertion order. Used to evict the oldest entry when
+-- the table hits MAX_STRIKE_KEYS. A FIFO ring buffer gives O(1) eviction
+-- without the O(n) scan that a full-table sort would need, so the cap can
+-- be enforced on the insert path and therefore ALWAYS holds — not just
+-- between GC passes.
+local strike_fifo   = {}
+local strike_fifo_head = 1
+local strike_fifo_tail = 0
 
 local bucket_count = 0
 local path_count   = 0
@@ -85,6 +102,71 @@ local function inc(key, by)
   if cur >= COUNTER_CEILING then cur = 0 end
   stats[key] = cur + by
   return cur + by
+end
+
+-- ---------------------------------------------------------------------------
+-- Strike-table FIFO
+--
+-- The per-IP tables are capped so a botnet rotating source IPs cannot
+-- grow them without bound (which OOM-killed an Envoy worker). The cap is
+-- enforced HERE, on the insert path, so it holds at every instant rather
+-- than only between GC passes.
+--
+-- These helpers manage a plain FIFO of IP keys. Eviction pops from the
+-- head; stale entries are skipped if the IP has already been removed by
+-- the TTL sweep.
+-- ---------------------------------------------------------------------------
+local function fifo_push(ip)
+  strike_fifo_tail = strike_fifo_tail + 1
+  strike_fifo[strike_fifo_tail] = ip
+end
+
+local function fifo_pop()
+  if strike_fifo_head > strike_fifo_tail then return nil end
+  local ip = strike_fifo[strike_fifo_head]
+  strike_fifo[strike_fifo_head] = nil
+  strike_fifo_head = strike_fifo_head + 1
+  -- Compact the ring occasionally so the backing table does not grow
+  -- without bound as head advances.
+  if strike_fifo_head > 4096 and strike_fifo_head * 2 > strike_fifo_tail then
+    local n = 0
+    for i = strike_fifo_head, strike_fifo_tail do
+      n = n + 1
+      strike_fifo[n] = strike_fifo[i]
+      strike_fifo[i] = nil
+    end
+    strike_fifo_head = 1
+    strike_fifo_tail = n
+  end
+  return ip
+end
+
+-- Remove every record for an IP and keep the counters in sync.
+local function drop_strike_record(ip)
+  if rate_strikes[ip] ~= nil then
+    rate_strikes[ip] = nil
+    rate_strikes_ts[ip] = nil
+    strike_count = strike_count - 1
+  else
+    rate_strikes_ts[ip] = nil
+  end
+  if ban_history[ip] ~= nil then
+    ban_history[ip] = nil
+    ban_history_ts[ip] = nil
+    strike_count = strike_count - 1
+  else
+    ban_history_ts[ip] = nil
+  end
+end
+
+-- Enforce the hard cap. Called on every insert, so the table can never
+-- exceed MAX_STRIKE_KEYS by more than the batch being inserted.
+local function enforce_strike_cap()
+  while strike_count >= MAX_STRIKE_KEYS do
+    local ip = fifo_pop()
+    if ip == nil then break end
+    drop_strike_record(ip)
+  end
 end
 
 local function ip_of(handle)
@@ -145,10 +227,80 @@ local function gc_auto_bans(now_ms)
   end
   for _, ip in ipairs(to_delete) do
     auto_banned[ip] = nil
-    rate_strikes[ip] = nil
+    if rate_strikes[ip] ~= nil then
+      rate_strikes[ip] = nil
+      strike_count = strike_count - 1
+    end
     auto_ban_count = auto_ban_count - 1
     inc("auto_ban_expired")
   end
+end
+
+-- Evict the auxiliary per-IP tables (rate-limit strikes, ban history).
+--
+-- These are keyed by IP and were previously never cleaned up, so a botnet
+-- rotating source IPs grew them without bound until the worker was
+-- OOM-killed (status=9/KILL in the journal).
+--
+-- Two independent mechanisms, because either one alone is insufficient:
+--
+--   1. Age-based expiry (STRIKE_TTL_MS). A strike record is only useful
+--      while the IP is still misbehaving. Once it has been quiet for
+--      longer than the TTL the record is worthless and gets dropped.
+--      This is what bounds growth when the auto-ban table is saturated
+--      (MAX_AUTO_BANS reached) and gc_auto_bans can no longer free
+--      anything.
+--
+--   2. Hard cap (MAX_STRIKE_KEYS). If the table somehow still exceeds the
+--      cap, evict least-recently-seen entries first. Backstop only.
+--
+-- PERFORMANCE: this scans the whole table, so it must not run on every
+-- request — at 20k entries x N rps that would peg the worker and make
+-- the filter itself the bottleneck. It runs on an interval instead
+-- (GC_INTERVAL_MS), and the O(n) "find the oldest" scan is done ONCE
+-- per GC pass rather than once per eviction.
+local function gc_strike_tables(now_ms)
+  if strike_count < MAX_STRIKE_KEYS then return end
+
+  -- Only run every GC_INTERVAL_MS. A strike table that is at its cap
+  -- stays at its cap between passes; that is fine, the cap IS the bound.
+  if now_ms - last_strike_gc < GC_INTERVAL_MS then return end
+  last_strike_gc = now_ms
+
+  -- 1. Drop anything past its TTL.
+  local expired = {}
+  for ip, ts in pairs(rate_strikes_ts) do
+    if (now_ms - ts) > STRIKE_TTL_MS then
+      expired[#expired + 1] = ip
+    end
+  end
+  for _, ip in ipairs(expired) do
+    drop_strike_record(ip)
+  end
+
+  -- 1b. Ban history for IPs that have gone quiet for longer than the TTL.
+  --     The history is only needed to escalate the ban tier, so once the
+  --     IP has been quiet for a while the tier can safely reset. This is
+  --     a separate sweep because an IP can have ban history even after
+  --     its strike record has been evicted.
+  local hist_expired = {}
+  for ip, ts in pairs(ban_history_ts) do
+    if (now_ms - ts) > STRIKE_TTL_MS then
+      hist_expired[#hist_expired + 1] = ip
+    end
+  end
+  for _, ip in ipairs(hist_expired) do
+    if ban_history[ip] ~= nil then
+      ban_history[ip] = nil
+      strike_count = strike_count - 1
+    end
+    ban_history_ts[ip] = nil
+  end
+
+  -- 2. Backstop: the hard cap is normally enforced on the insert path by
+  --    enforce_strike_cap(). This is only a safety net for the case where
+  --    the count somehow drifted (e.g. a stale entry was re-added).
+  enforce_strike_cap()
 end
 
 -- V2: Check if IP is auto-banned
@@ -168,13 +320,26 @@ local function record_rate_violation(ip, now_ms)
   if not AUTO_BAN_ENABLED then return end
 
   local strikes = (rate_strikes[ip] or 0) + 1
+  if rate_strikes[ip] == nil then
+    strike_count = strike_count + 1
+    fifo_push(ip)
+    -- Enforce the hard cap immediately. Doing it here (rather than only
+    -- in the periodic GC) means the table never exceeds the limit, not
+    -- just "on average" between GC passes.
+    enforce_strike_cap()
+  end
   rate_strikes[ip] = strikes
+  rate_strikes_ts[ip] = now_ms
 
   if strikes >= RATE_LIMIT_STRIKES then
     if auto_ban_count < MAX_AUTO_BANS then
       -- Determine ban duration based on history
       local ban_count = (ban_history[ip] or 0) + 1
+      if ban_history[ip] == nil then
+        strike_count = strike_count + 1
+      end
       ban_history[ip] = ban_count
+      ban_history_ts[ip] = now_ms
 
       local ban_duration
       if ban_count == 1 then
@@ -263,6 +428,7 @@ function envoy_on_request(handle)
 
   gc_buckets(now_ms)
   gc_auto_bans(now_ms)
+  gc_strike_tables(now_ms)
 
   inc("requests_total")
   if path:match("^[%w%-%_/%.]+$") and #path <= 64 then
@@ -335,3 +501,25 @@ function envoy_on_request(handle)
     return
   end
 end
+
+-- ===========================================================================
+-- Test hook
+--
+-- Exported for the unit test so it can assert the worker scaling and
+-- inspect the per-IP tables for unbounded growth. These are globals (not
+-- locals) so the test can read them after loading the file; Envoy's Lua
+-- sandbox permits globals.
+--
+-- Declared at the END of the file so every local above is in scope.
+-- ===========================================================================
+_edge_guard_config = {
+  env_workers     = ENV_WORKERS,
+  global_rate     = GLOBAL_RATE_LIMIT,
+  global_burst    = GLOBAL_BURST,
+  ip_rate_limit   = IP_RATE_LIMIT,
+  ip_burst        = IP_BURST,
+  max_strike_keys = MAX_STRIKE_KEYS,
+  rate_strikes    = rate_strikes,
+  ban_history     = ban_history,
+  auto_banned     = auto_banned,
+}

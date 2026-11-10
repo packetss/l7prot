@@ -87,6 +87,32 @@ PYEOF
   cp "$SRC_DIR/envoy/lua/edge_guard.lua" /etc/envoy/lua/edge_guard.lua
   patch_envoy_workers /etc/envoy/lua/edge_guard.lua
 
+  # Ensure the systemd unit carries a memory limit. Older installs predate
+  # this, and without it the kernel OOM killer picks Envoy as the victim.
+  if [ -f /etc/systemd/system/l7ddos-envoy.service ] \
+     && ! grep -q '^MemoryMax=' /etc/systemd/system/l7ddos-envoy.service; then
+    log "Adding MemoryMax to the Envoy unit"
+    python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("/etc/systemd/system/l7ddos-envoy.service")
+t = p.read_text()
+block = """# Bound Envoy's memory. Without a hard limit the kernel OOM killer picks
+# the victim, which was Envoy (observed: status=9/KILL), taking the whole
+# edge down. With MemoryMax set, systemd kills Envoy at a known threshold
+# and restarts it cleanly instead.
+MemoryMax=768M
+MemoryHigh=600M
+"""
+if "LimitNOFILE=" in t:
+    t = t.replace("LimitNOFILE=65536\n", "LimitNOFILE=65536\n" + block, 1)
+else:
+    t = t.replace("[Service]\n", "[Service]\n" + block, 1)
+p.write_text(t)
+print("  unit updated")
+PYEOF
+    systemctl daemon-reload
+  fi
+
   if /usr/local/bin/envoy --mode validate -c /etc/envoy/envoy.yaml 2>/tmp/envoy_validate.log; then
     systemctl restart l7ddos-envoy.service
     ok "Envoy updated and restarted"
@@ -107,11 +133,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+log "Applying L4 hardening"
+if [ -f "$SRC_DIR/scripts/harden.sh" ]; then
+  bash "$SRC_DIR/scripts/harden.sh" apply
+  ok "L4 hardening applied (nftables + sysctl + connlimit)"
+else
+  warn "harden.sh not found — skipping L4 hardening"
+fi
+
+# ---------------------------------------------------------------------------
 log "Verifying services"
-for svc in l7ddos-origin l7ddos-envoy l7dashboard; do
+for svc in l7ddos-origin l7ddos-envoy l7dashboard l7ddos-harden; do
   if systemctl is-active "$svc" >/dev/null 2>&1; then
     ok "$svc active"
-  else
+  elif systemctl list-unit-files | grep -q "^${svc}.service"; then
     warn "$svc is NOT active — check: journalctl -u $svc -n 50"
   fi
 done

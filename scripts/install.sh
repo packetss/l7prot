@@ -133,6 +133,12 @@ ExecStart=${ENVOY_BIN} -c /etc/envoy/envoy.yaml --log-level warn
 Restart=always
 RestartSec=2
 LimitNOFILE=65536
+# Bound Envoy's memory. Without a hard limit the kernel OOM killer picks
+# the victim, which was Envoy (observed: status=9/KILL), taking the whole
+# edge down. With MemoryMax set, systemd kills Envoy at a known threshold
+# and restarts it cleanly instead.
+MemoryMax=768M
+MemoryHigh=600M
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
@@ -181,6 +187,15 @@ done
 # ---------------------------------------------------------------------------
 log "Installing dashboard"
 bash "$SRC_DIR/dashboard/install-dashboard.sh"
+
+# ---------------------------------------------------------------------------
+log "Applying L4 hardening"
+if [ -f "$SRC_DIR/scripts/harden.sh" ]; then
+  bash "$SRC_DIR/scripts/harden.sh" apply
+  log "L4 hardening applied (nftables + sysctl + connlimit)"
+else
+  warn "harden.sh not found — skipping L4 hardening"
+fi
 
 echo
 log "Done. Next steps:"

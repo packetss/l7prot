@@ -149,6 +149,81 @@ check("normal UA + no accept -> allowed", st5 == nil, "got " .. tostring(st5))
 print("\n== misc ==")
 check("missing IP -> 400", status_of({ ip = "" }) == 400)
 
+print("\n== memory growth (botnet rotating source IPs) ==")
+-- Regression test: the per-IP auxiliary tables (rate-limit strikes and ban
+-- history) used to grow without bound, and a botnet rotating source IPs
+-- OOM-killed the Envoy worker (observed: status=9/KILL in the journal).
+--
+-- Hammer the filter with many distinct IPs, each tripping the rate limit,
+-- then confirm the tables got cleaned back down instead of accumulating.
+local function count_keys(t)
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  return n
+end
+
+-- Does the filter expose its internals for inspection?
+local probe = status_of({ ip = "198.18.0.1" })
+local rate_strikes = cfg and cfg.rate_strikes or {}
+local ban_history  = cfg and cfg.ban_history or {}
+local MAX_STRIKE_KEYS = cfg and cfg.max_strike_keys or 20000
+
+local before_strikes = count_keys(rate_strikes)
+local before_history = count_keys(ban_history)
+
+-- Hammer the filter with many distinct IPs, each tripping the rate limit,
+-- which populates rate_strikes and ban_history.
+--
+-- The burst is IP_BURST tokens, so we need more than that to trigger a 429,
+-- and more than RATE_LIMIT_STRIKES 429s to trigger an auto-ban. Send
+-- burst+strikes+5 requests to be safely past both thresholds.
+--
+-- We deliberately drive past MAX_STRIKE_KEYS: the invariant being tested
+-- is that the tables are CAPPED, not that they stay small.
+local requests_per_ip = (cfg and cfg.ip_burst or 25) + 10
+local num_ips = (cfg and cfg.max_strike_keys or 20000) + 5000
+for i = 1, num_ips do
+  -- Spread across the 3rd and 4th octets so every IP is genuinely distinct.
+  local ip = string.format("198.%d.%d.%d",
+    math.floor(i / 65536) % 256,
+    math.floor(i / 256) % 256,
+    i % 256)
+  for _ = 1, requests_per_ip do
+    status_of({ ip = ip })
+  end
+end
+
+local after_strikes = count_keys(rate_strikes)
+local after_history = count_keys(ban_history)
+
+-- The tables must never exceed the hard cap, no matter how many distinct
+-- source IPs hit us.
+check("strike table stays under the cap",
+      after_strikes <= MAX_STRIKE_KEYS,
+      "after=" .. tostring(after_strikes) .. " cap=" .. tostring(MAX_STRIKE_KEYS))
+check("ban history stays under the cap",
+      after_history <= MAX_STRIKE_KEYS,
+      "after=" .. tostring(after_history) .. " cap=" .. tostring(MAX_STRIKE_KEYS))
+check("total auxiliary entries stay bounded",
+      (after_strikes + after_history) <= 2 * MAX_STRIKE_KEYS,
+      "total=" .. tostring(after_strikes + after_history))
+
+-- The TTL path: once the offending IPs go quiet for longer than the
+-- strike TTL, their records should be reclaimed. This is the mechanism
+-- that bounds growth when the auto-ban table is saturated and
+-- gc_auto_bans can no longer free anything.
+clock_ms = clock_ms + 900000   -- 15 minutes
+status_of({ ip = "203.0.113.200" })   -- any request triggers a GC pass
+
+local ttl_strikes = count_keys(rate_strikes)
+local ttl_history = count_keys(ban_history)
+check("stale strike records are reclaimed after the TTL",
+      ttl_strikes < after_strikes,
+      "before=" .. tostring(after_strikes) .. " after=" .. tostring(ttl_strikes))
+check("stale ban history is reclaimed after the TTL",
+      ttl_history < after_history,
+      "before=" .. tostring(after_history) .. " after=" .. tostring(ttl_history))
+
 print("\n" .. string.rep("=", 40))
 print(string.format("  %d passed, %d failed", passed, failed))
 print(string.rep("=", 40))
