@@ -141,6 +141,12 @@ static_resources:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: https_edge
               codec_type: AUTO
+              # Cap the per-connection buffer. The default (1MB) times an
+              # unbounded connection count is what turns a connection
+              # flood into an OOM kill. 32KB is plenty for normal HTTP;
+              # larger responses are streamed in chunks rather than
+              # buffered whole.
+              per_connection_buffer_limit_bytes: 32768
 
               # Cap concurrent HTTP/2 streams per connection. Without this a
               # single attacker connection can have thousands of streams in
@@ -160,12 +166,6 @@ static_resources:
                 max_connection_duration: 60s
                 max_requests_per_connection: 1000
                 headers_with_underscores_action: REJECT_REQUEST
-                # Cap the per-connection buffer. The default (1MB) times an
-                # unbounded connection count is what turns a connection
-                # flood into an OOM kill. 32KB is plenty for normal HTTP;
-                # larger responses are streamed in chunks rather than
-                # buffered whole.
-                per_connection_buffer_limit_bytes: 32768
 
               # No trusted proxies in front — Magic Transit is L3/L4 only
               # (transparent to HTTP). xff_num_trusted_hops MUST be 0 here:
