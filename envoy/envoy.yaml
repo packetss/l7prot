@@ -112,8 +112,7 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
           enable_ja4_fingerprinting: true
     filter_chains:
-      - per_connection_buffer_limit_bytes: 32768
-        transport_socket:
+      - transport_socket:
           name: envoy.transport_sockets.tls
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
