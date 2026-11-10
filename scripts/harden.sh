@@ -258,7 +258,7 @@ ${unlimited}
         # Per-source concurrent connection cap. A browser uses 1-6; a bot
         # opening hundreds gets cut off. Checked before rate limiting so
         # connection-flood bots never consume rate-limit state.
-        tcp dport 443 ct state new meter connlimit { ip saddr ct count over ${CONNLIMIT_ABOVE} } drop
+        tcp dport 443 ct state new meter connlimit_per_ip { ip saddr ct count over ${CONNLIMIT_ABOVE} } drop
 
         # Per-source NEW connection rate. Over the limit -> drop.
         tcp dport 443 ct state new update @per_ip_conn { ip saddr limit rate over ${PER_IP_CONN_RATE}/second burst ${PER_IP_CONN_BURST} packets } drop
