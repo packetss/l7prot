@@ -130,8 +130,12 @@ async def get_envoy_stats():
         return stats_cache.get("data", {})
 
 
+_tailer_proc = None  # Global handle for cleanup
+
 def tail_envoy_logs():
     """Tail Envoy logs and parse JSON events (threaded)"""
+    global _tailer_proc
+
     # Seed counters from disk so cumulative totals survive restarts
     persisted = load_persisted_stats()
     for key, value in persisted.items():
@@ -141,6 +145,7 @@ def tail_envoy_logs():
     last_save = time.time()
 
     while True:
+        proc = None
         try:
             proc = subprocess.Popen(
                 ["journalctl", "-u", "l7ddos-envoy", "-f", "--output=cat"],
@@ -148,6 +153,7 @@ def tail_envoy_logs():
                 stderr=subprocess.DEVNULL,
                 text=True
             )
+            _tailer_proc = proc
 
             for line in proc.stdout:
                 try:
@@ -210,6 +216,12 @@ def tail_envoy_logs():
 
         except Exception as e:
             print(f"Log tailer error: {e}, restarting in 5s...")
+            if proc:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except:
+                    proc.kill()
             time.sleep(5)
 
 
