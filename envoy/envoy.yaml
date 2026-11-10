@@ -240,46 +240,9 @@ static_resources:
                     filter_enforced:
                       default_value: { numerator: 100, denominator: HUNDRED }
 
-                # ---- 3. WAF (Coraza, via WASM) ---------------------------
-                # coraza-proxy-wasm: https://github.com/corazawaf/coraza-proxy-wasm
-                # CRS is bundled in the wasm binary — Include @owasp_crs/*.conf
-                - name: envoy.filters.http.wasm
-                  typed_config:
-                    "@type": type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
-                    config:
-                      name: "coraza-filter"
-                      root_id: ""
-                      configuration:
-                        "@type": "type.googleapis.com/google.protobuf.StringValue"
-                        value: |
-                          {
-                            "directives_map": {
-                              "default": [
-                                "SecRuleEngine On",
-                                "SecRequestBodyAccess On",
-                                "SecRequestBodyLimit 1048576",
-                                "SecRequestBodyNoFilesLimit 1048576",
-                                "SecRequestBodyLimitAction Reject",
-                                "SecResponseBodyAccess Off",
-                                "SecAuditEngine On",
-                                "SecAuditLogRelevantStatus \"^(?:5[0-9]{2}|4[0-9][0-35-9]|4[1-9]4)\"",
-                                "SecAuditLog /dev/stdout",
-                                "SecRule REQUEST_URI \"@rx (?:\\\\.\\\\.[\\\\/]|%2e%2e%2f|\\\\x00|php://|data://|expect://)\" \"id:100005,phase:1,deny,status:400,log,msg:'Malicious path',severity:'CRITICAL',tag:'custom-traversal'\"",
-                                "SecRule REQUEST_METHOD \"!@rx ^(GET|HEAD|POST|PUT|DELETE|OPTIONS|PATCH)$\" \"id:100003,phase:1,deny,status:405,log,msg:'Method not allowed',severity:'WARNING',tag:'custom-method'\"",
-                                "SecRule REQUEST_HEADERS:Content-Length \"@gt 1048576\" \"id:100004,phase:1,deny,status:413,log,msg:'Request body too large',severity:'WARNING',tag:'custom-size'\"",
-                                "SecRule &REQUEST_HEADERS:X-Forwarded-For \"@gt 10\" \"id:100006,phase:1,deny,status:400,log,msg:'Header chain abuse',severity:'WARNING',tag:'custom-abuse'\"",
-                                "Include @crs-setup-conf",
-                                "Include @owasp_crs/*.conf"
-                              ]
-                            },
-                            "default_directives": "default"
-                          }
-                      vm_config:
-                        runtime: "envoy.wasm.runtime.v8"
-                        vm_id: "coraza-filter_vm_id"
-                        code:
-                          local:
-                            filename: /usr/local/lib/coraza-proxy-wasm.wasm
+                # ---- 3. WAF (Coraza) — disabled during active flood attack.
+                # Re-enable by restoring the envoy.filters.http.wasm block.
+                # Costs too much WASM memory under volumetric attack.
 
                 # ---- 4. cache (in-memory, single node) ----------------------
                 - name: envoy.filters.http.cache
