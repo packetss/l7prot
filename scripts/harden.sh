@@ -341,8 +341,12 @@ EOF
 
 install_self() {
   mkdir -p /usr/local/lib/l7ddos
-  install -m 0755 "$(readlink -f "${BASH_SOURCE[0]}")" "$RULES_SCRIPT"
-  ok "installed $RULES_SCRIPT"
+  local src
+  src="$(readlink -f "${BASH_SOURCE[0]}")"
+  if [ "$src" != "$RULES_SCRIPT" ]; then
+    install -m 0755 "$src" "$RULES_SCRIPT"
+    ok "installed $RULES_SCRIPT"
+  fi
 }
 
 status() {
