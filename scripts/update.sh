@@ -125,7 +125,7 @@ fi
 
 # ---------------------------------------------------------------------------
 log "Deploying dashboard"
-if systemctl list-unit-files | grep -q "^l7dashboard.service"; then
+if systemctl list-unit-files | grep -q "l7dashboard.service"; then
   bash "$SRC_DIR/dashboard/install-dashboard.sh"
   ok "Dashboard updated"
 else
