@@ -112,7 +112,8 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
           enable_ja4_fingerprinting: true
     filter_chains:
-      - transport_socket:
+      - per_connection_buffer_limit_bytes: 32768
+        transport_socket:
           name: envoy.transport_sockets.tls
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
@@ -141,12 +142,6 @@ static_resources:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: https_edge
               codec_type: AUTO
-              # Cap the per-connection buffer. The default (1MB) times an
-              # unbounded connection count is what turns a connection
-              # flood into an OOM kill. 32KB is plenty for normal HTTP;
-              # larger responses are streamed in chunks rather than
-              # buffered whole.
-              per_connection_buffer_limit_bytes: 32768
 
               # Cap concurrent HTTP/2 streams per connection. Without this a
               # single attacker connection can have thousands of streams in
