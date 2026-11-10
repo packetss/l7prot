@@ -228,15 +228,9 @@ table inet ${NFT_TABLE} {
         tcp flags == 0 drop                      # NULL scan
         tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) drop  # XMAS variant
 
-        # Drop fragmented packets to HTTPS. TLS handshakes and application
+        # Drop fragmented packets to HTTPS only. TLS handshakes and application
         # data fit in normal MTU; fragments are used to evade stateful inspection.
         tcp dport 443 ip frag-off & 0x1fff != 0 drop
-
-        # NEW TCP connections MUST have SYN set. Anything else is either
-        # part of an existing flow (which conntrack will handle) or invalid.
-        tcp flags & (fin|syn|rst|ack) == 0 drop
-        tcp flags & (fin|syn|rst|ack) == (fin|ack) drop
-        tcp flags & (fin|syn|rst|ack) == ack drop  # ACK-only on NEW connection
 
         # Everything that survives goes to conntrack and then to the input chain.
     }
@@ -261,6 +255,11 @@ table inet ${NFT_TABLE} {
         # limit here must never lock us out of the box.
 ${unlimited}
         # --- connection shedding -------------------------------------------
+        # Per-source concurrent connection cap. A browser uses 1-6; a bot
+        # opening hundreds gets cut off. Checked before rate limiting so
+        # connection-flood bots never consume rate-limit state.
+        tcp dport 443 ct state new ip saddr ct count over ${CONNLIMIT_ABOVE} drop
+
         # Per-source NEW connection rate. Over the limit -> drop.
         tcp dport 443 ct state new update @per_ip_conn { ip saddr limit rate over ${PER_IP_CONN_RATE}/second burst ${PER_IP_CONN_BURST} packets } drop
 
@@ -300,50 +299,20 @@ apply_nft() {
 }
 
 # ---------------------------------------------------------------------------
-# per-source CONCURRENT connection limit (iptables --connlimit)
+# per-source CONCURRENT connection limit
 #
-# This is the load-bearing control. It caps how many connections a single
-# source IP may hold at once, which is what reserves capacity for real
-# users: a bot opening 500 connections is cut off after ${CONNLIMIT_ABOVE},
-# while a browser using 4 is untouched.
-#
-# nftables has no equivalent primitive for this, so we use iptables (which
-# on modern kernels is backed by nft anyway, so the two coexist).
+# nftables ct count tracks concurrent connections per source IP. This is
+# the load-bearing control: a bot opening 500 connections is cut off after
+# CONNLIMIT_ABOVE, while a browser using 4 is untouched.
 # ---------------------------------------------------------------------------
-CONNLIMIT_RULE=(-p tcp --dport 443 -m connlimit
-                --connlimit-above "$CONNLIMIT_ABOVE"
-                --connlimit-addrsrc --connlimit-mask 32
-                --connlimit-upto "$CONNLIMIT_UPTO"
-                -j REJECT --reject-with tcp-reset)
-
 apply_connlimit() {
-  if ! command -v iptables >/dev/null 2>&1; then
-    warn "iptables not installed -- skipping per-source connection limit"
-    return 0
-  fi
-  if ! iptables -m connlimit -h >/dev/null 2>&1; then
-    warn "connlimit match not available -- skipping per-source connection limit"
-    return 0
-  fi
-
-  # Idempotent: remove any previous copy, then insert ours at the top so
-  # it is evaluated before the rest of the chain.
-  while iptables -C INPUT "${CONNLIMIT_RULE[@]}" 2>/dev/null; do
-    iptables -D INPUT "${CONNLIMIT_RULE[@]}" || break
-  done
-  if iptables -I INPUT 1 "${CONNLIMIT_RULE[@]}" 2>/dev/null; then
-    ok "applied per-source connection limit (>${CONNLIMIT_ABOVE} concurrent -> tcp-reset)"
-  else
-    warn "could not apply connlimit rule"
-  fi
+  # Already handled inside the nftables table via ct count — nothing to do.
+  ok "per-source connection limit handled by nftables (ct count)"
 }
 
 remove_connlimit() {
-  if ! command -v iptables >/dev/null 2>&1; then return 0; fi
-  while iptables -C INPUT "${CONNLIMIT_RULE[@]}" 2>/dev/null; do
-    iptables -D INPUT "${CONNLIMIT_RULE[@]}" || break
-  done
-  ok "removed connlimit rules"
+  # Handled by remove_all deleting the nftables table.
+  true
 }
 
 # ---------------------------------------------------------------------------
