@@ -53,11 +53,13 @@ admin:
 #   (scripts/harden.sh), which sheds connections before they cost anything.
 #   With that in place, bots never fill these slots and real users keep
 #   their capacity.
-resource_monitors:
-  - name: envoy.resource_monitors.global_downstream_max_connections
-    typed_config:
-      "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
-      max_active_downstream_connections: 6000
+overload_manager:
+  refresh_interval: 0.25s
+  resource_monitors:
+    - name: envoy.resource_monitors.global_downstream_max_connections
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
+        max_active_downstream_connections: 6000
 
 static_resources:
   listeners:
