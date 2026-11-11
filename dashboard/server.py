@@ -50,8 +50,8 @@ ja4_counters = defaultdict(int)
 hourly_blocked_events = deque()  # stores (timestamp, is_blocked) tuples
 
 # Track peak values
-peak_history_1min = deque()  # stores (timestamp, total_rps, allowed_rps) tuples
-peak_history_1hour = deque()  # stores (timestamp, total_rps, allowed_rps) tuples
+peak_history_1min = deque()  # stores (timestamp, allowed_rps, blocked_rps) tuples
+peak_history_1hour = deque()  # stores (timestamp, allowed_rps, blocked_rps) tuples
 
 # Counters that persist across restarts
 PERSISTED_COUNTERS = [
@@ -62,10 +62,10 @@ PERSISTED_COUNTERS = [
     "suspicious_blocked",
     "rate_limited",
     "auto_banned",
-    "peak_total_1min",
     "peak_allowed_1min",
-    "peak_total_1hour",
+    "peak_blocked_1min",
     "peak_allowed_1hour",
+    "peak_blocked_1hour",
 ]
 
 
@@ -430,7 +430,9 @@ async def api_public_stats(request):
 
     # Get peak values from persisted stats
     peak_allowed_1min = stats_cache.get("peak_allowed_1min", 0)
+    peak_blocked_1min = stats_cache.get("peak_blocked_1min", 0)
     peak_allowed_1hour = stats_cache.get("peak_allowed_1hour", 0)
+    peak_blocked_1hour = stats_cache.get("peak_blocked_1hour", 0)
 
     return web.json_response(
         {
@@ -445,7 +447,9 @@ async def api_public_stats(request):
                 "hourly_blocked": hourly_blocked,
                 "hour_total": hour_total,
                 "peak_allowed_1min": peak_allowed_1min,
+                "peak_blocked_1min": peak_blocked_1min,
                 "peak_allowed_1hour": peak_allowed_1hour,
+                "peak_blocked_1hour": peak_blocked_1hour,
             }
         },
         headers={"Cache-Control": "no-store"},

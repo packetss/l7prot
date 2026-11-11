@@ -327,18 +327,30 @@ h1 {
       </div>
 
       <div class="stat-group peak">
-        <div class="group-title">Peak Requests</div>
-        <div style="display: flex; gap: 2rem; justify-content: center;">
-          <div>
-            <div class="stat-label">1 Minute</div>
-            <div class="stat-value" id="stat-peak-1min">0</div>
-            <div class="stat-unit">per second</div>
-          </div>
-          <div>
-            <div class="stat-label">1 Hour</div>
-            <div class="stat-value" id="stat-peak-1hour">0</div>
-            <div class="stat-unit">per second</div>
-          </div>
+        <div class="group-title">Peak Requests (1 Minute)</div>
+        <div class="stat">
+          <div class="stat-label">Allowed</div>
+          <div class="stat-value" id="stat-peak-1min-allowed">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
+        <div class="stat danger">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" id="stat-peak-1min-blocked">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
+      </div>
+
+      <div class="stat-group peak">
+        <div class="group-title">Peak Requests (1 Hour)</div>
+        <div class="stat">
+          <div class="stat-label">Allowed</div>
+          <div class="stat-value" id="stat-peak-1hour-allowed">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
+        <div class="stat danger">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" id="stat-peak-1hour-blocked">0</div>
+          <div class="stat-unit">per second</div>
         </div>
       </div>
     </div>
@@ -410,8 +422,10 @@ async function updateStats() {
     window.prevThreats = threats;
 
     // Get peak values from API (persisted across refreshes)
-    const peak1min = stats.peak_allowed_1min || 0;
-    const peak1hour = stats.peak_allowed_1hour || 0;
+    const peak1minAllowed = stats.peak_allowed_1min || 0;
+    const peak1minBlocked = stats.peak_blocked_1min || 0;
+    const peak1hourAllowed = stats.peak_allowed_1hour || 0;
+    const peak1hourBlocked = stats.peak_blocked_1hour || 0;
 
     // Persist non-zero values for 3 seconds before dropping to zero
     if (allowedRps > 0) {
@@ -431,8 +445,10 @@ async function updateStats() {
 
     document.getElementById('stat-live').textContent = (displayRps || 0).toLocaleString();
     document.getElementById('stat-threats').textContent = (displayThreats || 0).toLocaleString();
-    document.getElementById('stat-peak-1min').textContent = peak1min.toLocaleString();
-    document.getElementById('stat-peak-1hour').textContent = peak1hour.toLocaleString();
+    document.getElementById('stat-peak-1min-allowed').textContent = peak1minAllowed.toLocaleString();
+    document.getElementById('stat-peak-1min-blocked').textContent = peak1minBlocked.toLocaleString();
+    document.getElementById('stat-peak-1hour-allowed').textContent = peak1hourAllowed.toLocaleString();
+    document.getElementById('stat-peak-1hour-blocked').textContent = peak1hourBlocked.toLocaleString();
 
     // Use hourly blocked from API (rolling 1-hour window)
     const hourlyBlocked = stats.hourly_blocked || 0;
