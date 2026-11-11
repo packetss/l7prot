@@ -141,6 +141,46 @@ async def get_envoy_stats():
 
 _tailer_proc = None  # Global handle for cleanup
 
+def calculate_peak_values():
+    """Calculate and persist peak RPS for 1min and 1hour windows"""
+    last_total = 0
+    last_time = time.time()
+
+    while True:
+        time.sleep(5)
+        try:
+            now = time.time()
+            elapsed = now - last_time
+
+            if elapsed > 0:
+                current_total = stats_cache.get("requests_total", 0)
+                rps = int((current_total - last_total) / elapsed)
+
+                last_total = current_total
+                last_time = now
+
+                # Track 1min peaks
+                peak_history_1min.append((now, rps))
+                cutoff_1min = now - 60
+                while peak_history_1min and peak_history_1min[0][0] < cutoff_1min:
+                    peak_history_1min.popleft()
+
+                # Track 1hour peaks
+                peak_history_1hour.append((now, rps))
+                cutoff_1hour = now - 3600
+                while peak_history_1hour and peak_history_1hour[0][0] < cutoff_1hour:
+                    peak_history_1hour.popleft()
+
+                if peak_history_1min:
+                    stats_cache["peak_rps_1min"] = max(entry[1] for entry in peak_history_1min)
+
+                if peak_history_1hour:
+                    stats_cache["peak_rps_1hour"] = max(entry[1] for entry in peak_history_1hour)
+
+        except Exception as e:
+            print(f"Peak calculation error: {e}", flush=True)
+
+
 def prune_old_events():
     """Remove events older than 1 hour (runs every 10 minutes)"""
     while True:
