@@ -457,6 +457,18 @@ async function updateStats() {
     const hourlyBlocked = stats.hourly_blocked || 0;
     document.getElementById('narrative-blocked').textContent = hourlyBlocked.toLocaleString();
 
+    // Report calculated rates to backend for peak tracking (fire and forget)
+    if (allowedRps > 0 || threatsPerSec > 0) {
+      fetch('/api/report-rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          allowed_rps: allowedRps,
+          blocked_rps: threatsPerSec
+        })
+      }).catch(() => {}); // Ignore errors
+    }
+
   } catch (err) {
     console.error('Failed to fetch stats:', err);
   } finally {

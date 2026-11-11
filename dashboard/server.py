@@ -465,6 +465,39 @@ async def api_public_stats(request):
     )
 
 
+async def api_report_rate(request):
+    """Frontend reports its calculated per-second rates for peak tracking"""
+    try:
+        data = await request.json()
+        allowed_rps = data.get("allowed_rps", 0)
+        blocked_rps = data.get("blocked_rps", 0)
+        now = time.time()
+
+        # Add to peak histories
+        peak_history_1min.append((now, allowed_rps, blocked_rps))
+        cutoff_1min = now - 60
+        while peak_history_1min and peak_history_1min[0][0] < cutoff_1min:
+            peak_history_1min.popleft()
+
+        peak_history_1hour.append((now, allowed_rps, blocked_rps))
+        cutoff_1hour = now - 3600
+        while peak_history_1hour and peak_history_1hour[0][0] < cutoff_1hour:
+            peak_history_1hour.popleft()
+
+        # Update peak values
+        if peak_history_1min:
+            stats_cache["peak_allowed_1min"] = max(entry[1] for entry in peak_history_1min)
+            stats_cache["peak_blocked_1min"] = max(entry[2] for entry in peak_history_1min)
+
+        if peak_history_1hour:
+            stats_cache["peak_allowed_1hour"] = max(entry[1] for entry in peak_history_1hour)
+            stats_cache["peak_blocked_1hour"] = max(entry[2] for entry in peak_history_1hour)
+
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400)
+
+
 async def logout(request):
     session = await aiohttp_session.get_session(request)
     session.clear()
@@ -492,6 +525,8 @@ def create_app():
     app.router.add_get("/api/events", api_events)
     # Public stats endpoint (no auth)
     app.router.add_get("/api/public-stats", api_public_stats)
+    # Frontend reports its calculated rates (no auth)
+    app.router.add_post("/api/report-rate", api_report_rate)
 
     # Start log tailer in background thread (non-blocking)
     async def start_background_tasks(app):
