@@ -315,7 +315,7 @@ h1 {
       <div class="stat-group">
         <div class="group-title">Live Requests</div>
         <div class="stat">
-          <div class="stat-label">Total</div>
+          <div class="stat-label">Allowed</div>
           <div class="stat-value" id="stat-live">0</div>
           <div class="stat-unit">per second</div>
         </div>
@@ -385,36 +385,37 @@ async function updateStats() {
     const stats = data.stats || {};
 
     const total = stats.requests_total || 0;
+    const allowed = stats.success_2xx || 0;
     const blocked = (stats.ip_blocked || 0) + (stats.ua_blocked || 0) + (stats.suspicious_blocked || 0);
     const ratelimited = stats.rate_limited || 0;
 
     const threats = blocked + ratelimited;
 
     // Track delta since last poll for live request count
-    if (!window.prevTotal) window.prevTotal = total;
+    if (!window.prevAllowed) window.prevAllowed = allowed;
+    if (!window.prevThreats) window.prevThreats = threats;
     if (!window.lastPollTime) window.lastPollTime = Date.now();
 
     const now = Date.now();
-    const delta = Math.max(0, total - window.prevTotal);
+    const allowedDelta = Math.max(0, allowed - window.prevAllowed);
     const elapsed = (now - window.lastPollTime) / 1000; // seconds
-    const rps = elapsed > 0 ? Math.round(delta / elapsed) : 0;
+    const allowedRps = elapsed > 0 ? Math.round(allowedDelta / elapsed) : 0;
 
-    window.prevTotal = total;
+    window.prevAllowed = allowed;
     window.lastPollTime = now;
 
-    // Track threat delta for active threats (also per second)
-    if (!window.prevThreats) window.prevThreats = threats;
+    // Track threat delta for blocked requests (also per second)
     const activeThreatsDelta = Math.max(0, threats - window.prevThreats);
     const threatsPerSec = elapsed > 0 ? Math.round(activeThreatsDelta / elapsed) : 0;
     window.prevThreats = threats;
 
     // Get peak values from API (persisted across refreshes)
-    const peak1min = stats.peak_rps_1min || 0;
-    const peak1hour = stats.peak_rps_1hour || 0;
+    const peak1min = stats.peak_allowed_1min || 0;
+    const peak1hour = stats.peak_allowed_1hour || 0;
 
     // Persist non-zero values for 3 seconds before dropping to zero
-    if (rps > 0) {
-      window.lastNonZeroRps = rps;
+    if (allowedRps > 0) {
+      window.lastNonZeroRps = allowedRps;
       window.lastNonZeroRpsTime = now;
     }
     if (threatsPerSec > 0) {
@@ -423,7 +424,7 @@ async function updateStats() {
     }
 
     // Show last non-zero value if it was within the last 3 seconds
-    const displayRps = rps > 0 ? rps :
+    const displayRps = allowedRps > 0 ? allowedRps :
       (window.lastNonZeroRpsTime && now - window.lastNonZeroRpsTime < 3000 ? window.lastNonZeroRps : 0);
     const displayThreats = threatsPerSec > 0 ? threatsPerSec :
       (window.lastNonZeroThreatsTime && now - window.lastNonZeroThreatsTime < 3000 ? window.lastNonZeroThreats : 0);
