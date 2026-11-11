@@ -338,16 +338,24 @@ async function updateStats() {
 
     // Track delta since last poll for live request count
     if (!window.prevTotal) window.prevTotal = total;
-    const delta = Math.max(0, total - window.prevTotal);
-    window.prevTotal = total;
+    if (!window.lastPollTime) window.lastPollTime = Date.now();
 
-    // Track threat delta for active threats
+    const now = Date.now();
+    const delta = Math.max(0, total - window.prevTotal);
+    const elapsed = (now - window.lastPollTime) / 1000; // seconds
+    const rps = elapsed > 0 ? Math.round(delta / elapsed) : 0;
+
+    window.prevTotal = total;
+    window.lastPollTime = now;
+
+    // Track threat delta for active threats (also per second)
     if (!window.prevThreats) window.prevThreats = threats;
     const activeThreatsDelta = Math.max(0, threats - window.prevThreats);
+    const threatsPerSec = elapsed > 0 ? Math.round(activeThreatsDelta / elapsed) : 0;
     window.prevThreats = threats;
 
-    document.getElementById('stat-live').textContent = delta.toLocaleString();
-    document.getElementById('stat-threats').textContent = activeThreatsDelta.toLocaleString();
+    document.getElementById('stat-live').textContent = rps.toLocaleString();
+    document.getElementById('stat-threats').textContent = threatsPerSec.toLocaleString();
 
     document.getElementById('narrative-blocked').textContent = (blocked + ratelimited).toLocaleString();
     document.getElementById('narrative-health').textContent = health + '%';
@@ -359,8 +367,7 @@ async function updateStats() {
   }
 }
 
-setInterval(updateStats, 5000);
-updateStats();
+setInterval(updateStats, 1000);
 updateStats();
 </script>
 

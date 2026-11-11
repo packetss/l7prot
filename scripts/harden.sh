@@ -53,8 +53,8 @@ CONNLIMIT_UPTO="${CONNLIMIT_UPTO:-32}"
 
 # Per-source NEW connection rate. Limits how fast one IP can open
 # connections. Legit users rarely open more than a couple per second.
-PER_IP_CONN_RATE="${PER_IP_CONN_RATE:-30}"
-PER_IP_CONN_BURST="${PER_IP_CONN_BURST:-60}"
+PER_IP_CONN_RATE="${PER_IP_CONN_RATE:-10}"
+PER_IP_CONN_BURST="${PER_IP_CONN_BURST:-20}"
 
 # Global NEW connection rate cap. Above this the box is being flooded and
 # new connections are refused outright. Set well above the real peak.
