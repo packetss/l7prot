@@ -132,6 +132,35 @@ async def get_envoy_stats():
 
 _tailer_proc = None  # Global handle for cleanup
 
+def prune_old_events():
+    """Remove events older than 1 hour (runs every 10 minutes)"""
+    while True:
+        time.sleep(600)  # 10 minutes
+        try:
+            cutoff_timestamp = time.time() - 3600  # 1 hour ago
+            old_len = len(recent_events)
+
+            # Filter events: keep only those newer than cutoff
+            filtered = []
+            for e in list(recent_events):
+                try:
+                    # Parse ISO timestamp from event
+                    event_time = datetime.fromisoformat(e["ts"].replace("Z", "+00:00")).timestamp()
+                    if event_time > cutoff_timestamp:
+                        filtered.append(e)
+                except (ValueError, KeyError):
+                    # Keep events with unparseable timestamps
+                    filtered.append(e)
+
+            recent_events.clear()
+            recent_events.extend(filtered)
+            pruned = old_len - len(recent_events)
+            if pruned > 0:
+                print(f"Pruned {pruned} events older than 1 hour", flush=True)
+        except Exception as e:
+            print(f"Event pruning error: {e}", flush=True)
+
+
 def tail_envoy_logs():
     """Tail Envoy logs and parse JSON events (threaded)"""
     global _tailer_proc
@@ -141,6 +170,10 @@ def tail_envoy_logs():
     for key, value in persisted.items():
         stats_cache[key] = value
     print(f"Loaded persisted stats: {persisted}", flush=True)
+
+    # Start pruning thread
+    prune_thread = threading.Thread(target=prune_old_events, daemon=True)
+    prune_thread.start()
 
     last_save = time.time()
 
