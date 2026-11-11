@@ -150,7 +150,7 @@ def calculate_peak_values():
     last_time = time.time()
 
     while True:
-        time.sleep(5)
+        time.sleep(1)  # Calculate every 1 second for accurate peaks
         try:
             now = time.time()
             elapsed = now - last_time
