@@ -282,7 +282,21 @@ h1 {
       <div class="stat danger">
         <div class="stat-label">Threats Blocked Now</div>
         <div class="stat-value" id="stat-threats">0</div>
-        <div class="stat-unit">active threats</div>
+        <div class="stat-unit">per second</div>
+      </div>
+    </div>
+
+    <div class="stat-section">
+      <div class="stat">
+        <div class="stat-label">Peak Requests (5min)</div>
+        <div class="stat-value" id="stat-peak-rps">0</div>
+        <div class="stat-unit">per second</div>
+      </div>
+
+      <div class="stat danger">
+        <div class="stat-label">Peak Blocked (5min)</div>
+        <div class="stat-value" id="stat-peak-blocked">0</div>
+        <div class="stat-unit">per second</div>
       </div>
     </div>
 
@@ -353,6 +367,15 @@ async function updateStats() {
     const threatsPerSec = elapsed > 0 ? Math.round(activeThreatsDelta / elapsed) : 0;
     window.prevThreats = threats;
 
+    // Track peak values over last 5 minutes
+    if (!window.peakHistory) window.peakHistory = [];
+    window.peakHistory.push({ time: now, rps, threatsPerSec });
+    // Keep only last 5 minutes of data
+    window.peakHistory = window.peakHistory.filter(entry => now - entry.time < 300000);
+
+    const peakRps = Math.max(...window.peakHistory.map(e => e.rps), 0);
+    const peakBlocked = Math.max(...window.peakHistory.map(e => e.threatsPerSec), 0);
+
     // Persist non-zero values for 3 seconds before dropping to zero
     if (rps > 0) {
       window.lastNonZeroRps = rps;
@@ -371,9 +394,10 @@ async function updateStats() {
 
     document.getElementById('stat-live').textContent = (displayRps || 0).toLocaleString();
     document.getElementById('stat-threats').textContent = (displayThreats || 0).toLocaleString();
+    document.getElementById('stat-peak-rps').textContent = peakRps.toLocaleString();
+    document.getElementById('stat-peak-blocked').textContent = peakBlocked.toLocaleString();
 
     document.getElementById('narrative-blocked').textContent = (blocked + ratelimited).toLocaleString();
-    document.getElementById('narrative-health').textContent = health + '%';
 
   } catch (err) {
     console.error('Failed to fetch stats:', err);
