@@ -152,7 +152,7 @@ h1 {
 
 .stat-section {
   display: flex;
-  gap: 4rem;
+  gap: 2rem;
   justify-content: center;
   flex-wrap: wrap;
 }
@@ -162,15 +162,32 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  min-width: 200px;
 }
 
 .group-title {
-  color: #8b949e;
+  color: #00ff88;
   font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
   font-weight: 600;
   margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+  padding-bottom: 0.75rem;
+}
+
+.stat-group.peak .group-title {
+  color: #00ccff;
+  border-bottom-color: rgba(0, 204, 255, 0.2);
+}
+
+.stat-group.danger .group-title {
+  color: #ff0055;
+  border-bottom-color: rgba(255, 0, 85, 0.2);
 }
 
 .stat {
@@ -302,7 +319,7 @@ h1 {
         </div>
       </div>
 
-      <div class="stat-group">
+      <div class="stat-group peak">
         <div class="group-title">Peak Requests (1min)</div>
         <div class="stat">
           <div class="stat-label">Total</div>
@@ -316,7 +333,7 @@ h1 {
         </div>
       </div>
 
-      <div class="stat-group">
+      <div class="stat-group danger">
         <div class="group-title">Last Hour</div>
         <div class="stat">
           <div class="stat-label">Total</div>
