@@ -353,8 +353,24 @@ async function updateStats() {
     const threatsPerSec = elapsed > 0 ? Math.round(activeThreatsDelta / elapsed) : 0;
     window.prevThreats = threats;
 
-    document.getElementById('stat-live').textContent = rps.toLocaleString();
-    document.getElementById('stat-threats').textContent = threatsPerSec.toLocaleString();
+    // Persist non-zero values for 3 seconds before dropping to zero
+    if (rps > 0) {
+      window.lastNonZeroRps = rps;
+      window.lastNonZeroRpsTime = now;
+    }
+    if (threatsPerSec > 0) {
+      window.lastNonZeroThreats = threatsPerSec;
+      window.lastNonZeroThreatsTime = now;
+    }
+
+    // Show last non-zero value if it was within the last 3 seconds
+    const displayRps = rps > 0 ? rps :
+      (window.lastNonZeroRpsTime && now - window.lastNonZeroRpsTime < 3000 ? window.lastNonZeroRps : 0);
+    const displayThreats = threatsPerSec > 0 ? threatsPerSec :
+      (window.lastNonZeroThreatsTime && now - window.lastNonZeroThreatsTime < 3000 ? window.lastNonZeroThreats : 0);
+
+    document.getElementById('stat-live').textContent = (displayRps || 0).toLocaleString();
+    document.getElementById('stat-threats').textContent = (displayThreats || 0).toLocaleString();
 
     document.getElementById('narrative-blocked').textContent = (blocked + ratelimited).toLocaleString();
     document.getElementById('narrative-health').textContent = health + '%';
