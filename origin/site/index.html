@@ -152,30 +152,45 @@ h1 {
 
 .stat-section {
   display: flex;
-  gap: 3rem;
+  gap: 4rem;
   justify-content: center;
   flex-wrap: wrap;
 }
 
+.stat-group {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.group-title {
+  color: #8b949e;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
 .stat {
   text-align: center;
-  animation: slideUp 0.8s ease;
 }
 
 .stat-label {
-  color: #8b949e;
-  font-size: 0.85rem;
+  color: #6e7681;
+  font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
-  margin-bottom: 0.75rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
 }
 
 .stat-value {
-  font-size: 3.5rem;
+  font-size: 2.5rem;
   font-weight: 900;
   color: #00ff88;
   text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   line-height: 1;
 }
 
@@ -273,35 +288,47 @@ h1 {
     <h1>filterz.xyz</h1>
 
     <div class="stat-section">
-      <div class="stat">
-        <div class="stat-label">Live Requests</div>
-        <div class="stat-value" id="stat-live">0</div>
-        <div class="stat-unit">per second</div>
+      <div class="stat-group">
+        <div class="group-title">Live Requests</div>
+        <div class="stat">
+          <div class="stat-label">Total</div>
+          <div class="stat-value" id="stat-live">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
+        <div class="stat danger">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" id="stat-threats">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
       </div>
 
-      <div class="stat danger">
-        <div class="stat-label">Threats Blocked Now</div>
-        <div class="stat-value" id="stat-threats">0</div>
-        <div class="stat-unit">per second</div>
+      <div class="stat-group">
+        <div class="group-title">Peak Requests (1min)</div>
+        <div class="stat">
+          <div class="stat-label">Total</div>
+          <div class="stat-value" id="stat-peak-rps">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
+        <div class="stat danger">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" id="stat-peak-blocked">0</div>
+          <div class="stat-unit">per second</div>
+        </div>
       </div>
-    </div>
 
-    <div class="stat-section">
-      <div class="stat">
-        <div class="stat-label">Peak Requests (5min)</div>
-        <div class="stat-value" id="stat-peak-rps">0</div>
-        <div class="stat-unit">per second</div>
+      <div class="stat-group">
+        <div class="group-title">Last Hour</div>
+        <div class="stat">
+          <div class="stat-label">Total</div>
+          <div class="stat-value" id="stat-hour-total">0</div>
+          <div class="stat-unit">requests</div>
+        </div>
+        <div class="stat danger">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" id="stat-hour-blocked">0</div>
+          <div class="stat-unit">requests</div>
+        </div>
       </div>
-
-      <div class="stat danger">
-        <div class="stat-label">Peak Blocked (5min)</div>
-        <div class="stat-value" id="stat-peak-blocked">0</div>
-        <div class="stat-unit">per second</div>
-      </div>
-    </div>
-
-    <div class="narrative">
-      Requests dropped in the past hour: <span class="narrative-danger" id="narrative-blocked">0</span>.
     </div>
 
     <div class="status">
@@ -347,7 +374,6 @@ async function updateStats() {
     const success = stats.success_2xx || 0;
 
     const threats = blocked + ratelimited;
-    const health = total > 0 ? Math.round(((blocked + ratelimited) / total) * 100) : 0;
 
     // Track delta since last poll for live request count
     if (!window.prevTotal) window.prevTotal = total;
@@ -367,14 +393,13 @@ async function updateStats() {
     const threatsPerSec = elapsed > 0 ? Math.round(activeThreatsDelta / elapsed) : 0;
     window.prevThreats = threats;
 
-    // Track peak values over last 5 minutes
-    if (!window.peakHistory) window.peakHistory = [];
-    window.peakHistory.push({ time: now, rps, threatsPerSec });
-    // Keep only last 5 minutes of data
-    window.peakHistory = window.peakHistory.filter(entry => now - entry.time < 300000);
+    // Get peak values from API (persisted across refreshes)
+    const peakRps = stats.peak_rps_1min || 0;
+    const peakBlocked = stats.peak_blocked_1min || 0;
 
-    const peakRps = Math.max(...window.peakHistory.map(e => e.rps), 0);
-    const peakBlocked = Math.max(...window.peakHistory.map(e => e.threatsPerSec), 0);
+    // Get hourly totals from API
+    const hourTotal = stats.hour_total || 0;
+    const hourBlocked = stats.hourly_blocked || 0;
 
     // Persist non-zero values for 3 seconds before dropping to zero
     if (rps > 0) {
@@ -396,8 +421,8 @@ async function updateStats() {
     document.getElementById('stat-threats').textContent = (displayThreats || 0).toLocaleString();
     document.getElementById('stat-peak-rps').textContent = peakRps.toLocaleString();
     document.getElementById('stat-peak-blocked').textContent = peakBlocked.toLocaleString();
-
-    document.getElementById('narrative-blocked').textContent = (blocked + ratelimited).toLocaleString();
+    document.getElementById('stat-hour-total').textContent = hourTotal.toLocaleString();
+    document.getElementById('stat-hour-blocked').textContent = hourBlocked.toLocaleString();
 
   } catch (err) {
     console.error('Failed to fetch stats:', err);

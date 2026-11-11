@@ -46,6 +46,12 @@ ip_counters = defaultdict(int)  # all requests
 attacker_ip_counters = defaultdict(int)  # only 403/429
 ja4_counters = defaultdict(int)
 
+# Track hourly blocked requests with timestamps
+hourly_blocked_events = deque()  # stores (timestamp, is_blocked) tuples
+
+# Track peak values for last 5 minutes
+peak_history = deque()  # stores (timestamp, rps, blocked_per_sec) tuples
+
 # Counters that persist across restarts
 PERSISTED_COUNTERS = [
     "requests_total",
@@ -55,6 +61,8 @@ PERSISTED_COUNTERS = [
     "suspicious_blocked",
     "rate_limited",
     "auto_banned",
+    "peak_rps_1min",
+    "peak_blocked_1min",
 ]
 
 
@@ -175,6 +183,10 @@ def tail_envoy_logs():
     prune_thread = threading.Thread(target=prune_old_events, daemon=True)
     prune_thread.start()
 
+    # Start peak calculation thread
+    peak_thread = threading.Thread(target=calculate_peak_values, daemon=True)
+    peak_thread.start()
+
     last_save = time.time()
 
     while True:
@@ -227,6 +239,16 @@ def tail_envoy_logs():
                         # Track stats by status code
                         stats_cache.setdefault("requests_total", 0)
                         stats_cache["requests_total"] += 1
+
+                        # Track for hourly blocked count (rolling window)
+                        now_ts = time.time()
+                        is_blocked = status in (403, 429)
+                        hourly_blocked_events.append((now_ts, is_blocked))
+
+                        # Prune hourly events older than 1 hour
+                        hourly_cutoff = now_ts - 3600
+                        while hourly_blocked_events and hourly_blocked_events[0][0] < hourly_cutoff:
+                            hourly_blocked_events.popleft()
 
                         if status == 200:
                             stats_cache.setdefault("success_2xx", 0)
@@ -356,6 +378,17 @@ async def api_public_stats(request):
     Deliberately does NOT scan the journal: that blocked the event loop
     and, as the journal grew, made every response take tens of seconds.
     """
+    now = time.time()
+
+    # Calculate hourly counts from events in the last hour
+    hourly_cutoff = now - 3600
+    hourly_blocked = sum(1 for ts, is_blocked in hourly_blocked_events if ts > hourly_cutoff and is_blocked)
+    hour_total = sum(1 for ts, _ in hourly_blocked_events if ts > hourly_cutoff)
+
+    # Get peak values from persisted stats
+    peak_rps = stats_cache.get("peak_rps_1min", 0)
+    peak_blocked = stats_cache.get("peak_blocked_1min", 0)
+
     return web.json_response(
         {
             "stats": {
@@ -366,6 +399,10 @@ async def api_public_stats(request):
                 "suspicious_blocked": stats_cache.get("suspicious_blocked", 0),
                 "rate_limited": stats_cache.get("rate_limited", 0),
                 "auto_banned": stats_cache.get("auto_banned", 0),
+                "hourly_blocked": hourly_blocked,
+                "hour_total": hour_total,
+                "peak_rps_1min": peak_rps,
+                "peak_blocked_1min": peak_blocked,
             }
         },
         headers={"Cache-Control": "no-store"},
