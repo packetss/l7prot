@@ -145,7 +145,8 @@ _tailer_proc = None  # Global handle for cleanup
 
 def calculate_peak_values():
     """Calculate and persist peak RPS for 1min and 1hour windows"""
-    last_total = 0
+    last_allowed = None
+    last_blocked = None
     last_time = time.time()
 
     while True:
@@ -155,29 +156,37 @@ def calculate_peak_values():
             elapsed = now - last_time
 
             if elapsed > 0:
-                current_total = stats_cache.get("requests_total", 0)
-                rps = int((current_total - last_total) / elapsed)
+                current_allowed = stats_cache.get("success_2xx", 0)
+                current_blocked = stats_cache.get("ip_blocked", 0) + stats_cache.get("rate_limited", 0)
 
-                last_total = current_total
+                # Skip first iteration to avoid huge spike
+                if last_allowed is not None and last_blocked is not None:
+                    allowed_rps = int((current_allowed - last_allowed) / elapsed)
+                    blocked_rps = int((current_blocked - last_blocked) / elapsed)
+
+                    # Track 1min peaks
+                    peak_history_1min.append((now, allowed_rps, blocked_rps))
+                    cutoff_1min = now - 60
+                    while peak_history_1min and peak_history_1min[0][0] < cutoff_1min:
+                        peak_history_1min.popleft()
+
+                    # Track 1hour peaks
+                    peak_history_1hour.append((now, allowed_rps, blocked_rps))
+                    cutoff_1hour = now - 3600
+                    while peak_history_1hour and peak_history_1hour[0][0] < cutoff_1hour:
+                        peak_history_1hour.popleft()
+
+                    if peak_history_1min:
+                        stats_cache["peak_allowed_1min"] = max(entry[1] for entry in peak_history_1min)
+                        stats_cache["peak_blocked_1min"] = max(entry[2] for entry in peak_history_1min)
+
+                    if peak_history_1hour:
+                        stats_cache["peak_allowed_1hour"] = max(entry[1] for entry in peak_history_1hour)
+                        stats_cache["peak_blocked_1hour"] = max(entry[2] for entry in peak_history_1hour)
+
+                last_allowed = current_allowed
+                last_blocked = current_blocked
                 last_time = now
-
-                # Track 1min peaks
-                peak_history_1min.append((now, rps))
-                cutoff_1min = now - 60
-                while peak_history_1min and peak_history_1min[0][0] < cutoff_1min:
-                    peak_history_1min.popleft()
-
-                # Track 1hour peaks
-                peak_history_1hour.append((now, rps))
-                cutoff_1hour = now - 3600
-                while peak_history_1hour and peak_history_1hour[0][0] < cutoff_1hour:
-                    peak_history_1hour.popleft()
-
-                if peak_history_1min:
-                    stats_cache["peak_rps_1min"] = max(entry[1] for entry in peak_history_1min)
-
-                if peak_history_1hour:
-                    stats_cache["peak_rps_1hour"] = max(entry[1] for entry in peak_history_1hour)
 
         except Exception as e:
             print(f"Peak calculation error: {e}", flush=True)
