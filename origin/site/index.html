@@ -18,10 +18,11 @@ body {
   background: #000;
   color: #fff;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   position: relative;
   min-height: 100vh;
+  padding: 2rem 0;
 }
 
 .stars {
@@ -282,6 +283,7 @@ h1 {
 }
 
 @media (max-width: 768px) {
+  body { padding: 1rem 0; }
   .globe { width: 150px; height: 150px; }
   h1 { font-size: 1.3rem; }
   .stat-value { font-size: 1.5rem; }
