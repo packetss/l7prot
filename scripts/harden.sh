@@ -214,23 +214,23 @@ table inet ${NFT_TABLE} {
         type filter hook prerouting priority raw; policy accept;
 
         # Never filter loopback.
-        iif lo accept
+        iif lo counter accept
 
         # Drop packets from bogon source IPs. These should never appear on
         # the public internet - either spoofed or misconfigured bots.
-        ip saddr @bogons drop
+        ip saddr @bogons counter drop
 
         # Drop invalid TCP flag combinations. Legitimate traffic never uses
         # these; they're only seen in port scans and evasion attempts.
-        tcp flags & (fin|syn) == (fin|syn) drop  # SYN+FIN
-        tcp flags & (syn|rst) == (syn|rst) drop  # SYN+RST
-        tcp flags == (fin|psh|urg) drop          # XMAS scan
-        tcp flags == 0 drop                      # NULL scan
-        tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) drop  # XMAS variant
+        tcp flags & (fin|syn) == (fin|syn) counter drop  # SYN+FIN
+        tcp flags & (syn|rst) == (syn|rst) counter drop  # SYN+RST
+        tcp flags == (fin|psh|urg) counter drop          # XMAS scan
+        tcp flags == 0 counter drop                      # NULL scan
+        tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) counter drop  # XMAS variant
 
         # Drop fragmented packets to HTTPS only. TLS handshakes and application
         # data fit in normal MTU; fragments are used to evade stateful inspection.
-        tcp dport 443 ip frag-off & 0x1fff != 0 drop
+        tcp dport 443 ip frag-off & 0x1fff != 0 counter drop
 
         # Everything that survives goes to conntrack and then to the input chain.
     }
@@ -239,27 +239,27 @@ table inet ${NFT_TABLE} {
         type filter hook input priority filter; policy accept;
 
         # Never rate limit loopback.
-        iif lo accept
+        iif lo counter accept
 
         # Established traffic is never limited.
-        ct state established,related accept
+        ct state established,related counter accept
 
         # Drop invalid conntrack states. These should have been caught in
         # prerouting, but belt-and-suspenders.
-        ct state invalid drop
+        ct state invalid counter drop
 
         # ICMP (path MTU discovery etc.) must keep working.
-        ip protocol icmp accept
+        ip protocol icmp counter accept
 
         # Ports that are always allowed. SSH in particular: a bad rate
         # limit here must never lock us out of the box.
 ${unlimited}
         # --- connection shedding -------------------------------------------
         # Per-source NEW connection rate. Over the limit -> drop.
-        tcp dport 443 ct state new update @per_ip_conn { ip saddr limit rate over ${PER_IP_CONN_RATE}/second burst ${PER_IP_CONN_BURST} packets } drop
+        tcp dport 443 ct state new update @per_ip_conn { ip saddr limit rate over ${PER_IP_CONN_RATE}/second burst ${PER_IP_CONN_BURST} packets } counter drop
 
         # Global NEW connection cap. Over the limit -> drop.
-        tcp dport 443 ct state new limit rate over ${GLOBAL_CONN_RATE}/second burst ${GLOBAL_CONN_BURST} packets drop
+        tcp dport 443 ct state new limit rate over ${GLOBAL_CONN_RATE}/second burst ${GLOBAL_CONN_BURST} packets counter drop
 
         # Everything else (including anything on 443 that is not "new")
         # is allowed through to Envoy.
